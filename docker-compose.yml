@@ -1,0 +1,53 @@
+# Fire up the whole FMD stack with one command:
+#
+#   docker compose up --build
+#
+# - db   : a single Postgres instance. It backs BOTH storage styles --
+#          relational tables for [List] entities, JSONB documents for [Store]s.
+# - api  : the Node service that creates/seeds those, and serves /api/<source>,
+#          routing each binding to its table or its JSONB collection.
+# - web  : the Vite dev server (the FMD editor + live preview), with /api
+#          proxied to the api service.
+#
+# Open http://localhost:5173
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: fmd
+      POSTGRES_PASSWORD: fmd
+      POSTGRES_DB: fmd
+    ports:
+      - "5433:5432"   # 5433 on host to avoid clashing with other local Postgres
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fmd -d fmd"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: ./server
+    environment:
+      DATABASE_URL: postgres://fmd:fmd@db:5432/fmd
+      PORT: "4000"
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "4000:4000"
+
+  web:
+    build: .
+    environment:
+      VITE_API_PROXY: http://api:4000
+      VITE_DISABLE_OPEN: "1"
+    depends_on:
+      - api
+    ports:
+      - "5173:5173"
+
+volumes:
+  pgdata:

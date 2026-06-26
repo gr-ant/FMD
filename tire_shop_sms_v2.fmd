@@ -1,0 +1,214 @@
+[App Name] Tire Shop SMS
+
+[Display] Dashboard
+  [Title] 🛞 Tire Shop SMS
+  [Top Menu Bar] Dashboard, Customers, Vehicles, Schedule, Work Orders, Inventory, Vendors, Payments, Admin
+  [Main]
+    ((Actions)
+      [Button -> Appointments] New Appointment
+      [Button -> WorkOrders] New Work Order
+      [Button -> Payments] Record Payment
+    )
+    ((TodayAppointments)
+      [Table -> Appointments] Date, Time, Customer, Vehicle, Reason, Status
+    )
+    ((OpenWorkOrders)
+      [Checklist -> WorkOrders] WorkOrder / Done
+    )
+    ((InventorySnapshot)
+      [Table -> Inventory] Name, Size, Brand, Type, Count, Reorder, RetailPrice, Status
+    )
+    ((RecentPayments)
+      [Table -> Payments] Date, Customer, WorkOrder, Method, Amount, Status
+    )
+
+[Display] Customers
+  [Title] Customers
+  [Main]
+    ((Actions)
+      [Button -> Customers] New Customer
+    )
+    ((CustomerList)
+      [Table -> Customers] Name, Phone, Email, Address, Notes
+    )
+
+[Display] Vehicles
+  [Title] Vehicles
+  [Main]
+    ((Actions)
+      [Button -> Vehicles] New Vehicle
+    )
+    ((VehicleList)
+      [Table -> Vehicles] Customer, Year, Make, Model, Trim, Plate, VIN, Mileage
+    )
+
+[Display] Schedule
+  [Title] Schedule
+  [Main]
+    ((Actions)
+      [Button -> Appointments] New Appointment
+    )
+    ((Appointments)
+      [Table -> Appointments] Date, Time, Customer, Vehicle, Reason, Status, Notes
+    )
+
+[Display] Work Orders
+  [Title] Work Orders
+  [Main]
+    ((Actions)
+      [Button -> WorkOrders] New Work Order
+      [Button -> WorkOrderItems] Add Work Order Item
+      [Button -> Inspections] New Inspection
+    )
+    ((WorkOrders)
+      [Table -> WorkOrders] WorkOrder, Date, Customer, Vehicle, Status, Done, Technician, Estimate, Total, Notes
+    )
+    ((WorkOrderItems)
+      [Table -> WorkOrderItems] WorkOrder, ItemType, Inventory, Service, Description, Quantity, UnitPrice, LineTotal, Status
+    )
+    ((Inspections)
+      [Table -> Inspections] WorkOrder, TreadDepth, AirPressure, TPMS, Alignment, Recommendations, Status
+    )
+
+[Display] Inventory
+  [Title] Tire Inventory
+  [Main]
+    ((Actions)
+      [Button -> Inventory] New Tire
+    )
+    ((TireInventory)
+      [Table -> Inventory] Name, Size, Brand, Type, Count, Reorder, UnitCost, RetailPrice, Vendor, Location, Status
+    )
+
+[Display] Vendors
+  [Title] Vendors
+  [Main]
+    ((Actions)
+      [Button -> Vendors] New Vendor
+    )
+    ((VendorList)
+      [Table -> Vendors] Name, Phone, Email, AccountNumber, Contact, Active, Notes
+    )
+
+[Display] Payments
+  [Title] Payments
+  [Main]
+    ((Actions)
+      [Button -> Payments] Record Payment
+    )
+    ((PaymentList)
+      [Table -> Payments] Date, Customer, WorkOrder, Method, Amount, Status, Reference, Notes
+    )
+
+[Display] Admin
+  [Title] Admin
+  [Main]
+    ((CustomerAdmin)
+      [cudTable -> Customers] Name, Phone, Email, Address, Notes
+    )
+    ((VehicleAdmin)
+      [cudTable -> Vehicles] Customer, Year, Make, Model, Trim, Plate, VIN, Mileage
+    )
+    ((AppointmentAdmin)
+      [cudTable -> Appointments] Date, Time, Customer, Vehicle, Reason, Status, Notes
+    )
+    ((WorkOrderAdmin)
+      [cudTable -> WorkOrders] WorkOrder, Date, Customer, Vehicle, Status, Done, Technician, Estimate, Total, Notes
+    )
+    ((WorkOrderItemAdmin)
+      [cudTable -> WorkOrderItems] WorkOrder, ItemType, Inventory, Service, Description, Quantity, UnitPrice, LineTotal, Status
+    )
+    ((InventoryAdmin)
+      [cudTable -> Inventory] Name, Size, Brand, Type, Count, Reorder, UnitCost, RetailPrice, Vendor, Location, Status
+    )
+    ((VendorAdmin)
+      [cudTable -> Vendors] Name, Phone, Email, AccountNumber, Contact, Active, Notes
+    )
+    ((PaymentAdmin)
+      [cudTable -> Payments] Date, Customer, WorkOrder, Method, Amount, Status, Reference, Notes
+    )
+    ((ServiceAdmin)
+      [cudTable -> Services] Name, Category, Price, DefaultMinutes, Active
+    )
+    ((StaffAdmin)
+      [cudTable -> Staff] Name, Role, Phone, Email, Active
+    )
+    ((InspectionAdmin)
+      [cudTable -> Inspections] WorkOrder, TreadDepth, AirPressure, TPMS, Alignment, Recommendations, Status
+    )
+
+[Form -> Customers] New Customer
+  [Fields] Name, Phone, Email, Address, Notes
+
+[Form -> Vehicles] New Vehicle
+  [Fields] Customer, Year, Make, Model, Trim, Plate, VIN, Mileage
+
+[Form -> Appointments] New Appointment
+  [Fields] Date, Time, Customer, Vehicle, Reason, Status, Notes
+
+[Form -> WorkOrders] New Work Order
+  [Fields] WorkOrder, Date, Customer, Vehicle, Status, Done, Technician, Estimate, Total, Notes
+
+[Form -> WorkOrderItems] Add Work Order Item
+  [Fields] WorkOrder, ItemType, Inventory, Service, Description, Quantity, UnitPrice, LineTotal, Status
+
+[Form -> Inventory] New Tire
+  [Fields] Name, Size, Brand, Type, Count, Reorder, UnitCost, RetailPrice, Vendor, Location, Status
+
+[Form -> Vendors] New Vendor
+  [Fields] Name, Phone, Email, AccountNumber, Contact, Active, Notes
+
+[Form -> Payments] Record Payment
+  [Fields] Date, Customer, WorkOrder, Method, Amount, Status, Reference, Notes
+
+[Form -> Inspections] New Inspection
+  [Fields] WorkOrder, TreadDepth, AirPressure, TPMS, Alignment, Recommendations, Status
+
+[Data]
+  [List Customers] txtName, txtPhone, txtEmail, txtAddress, txtNotes
+
+  [List Vehicles] linkCustomer, txtYear, txtMake, txtModel, txtTrim, txtPlate, txtVIN, numMileage
+    (Customer) -> Customers Name
+
+  [List Appointments] dateDate, txtTime, linkCustomer, linkVehicle, dropReason, dropStatus, txtNotes
+    (Customer) -> Customers Name
+    (Vehicle) -> Vehicles Plate
+    (Reason) TireInstall, TireRepair, Rotation, Balance, Alignment, TPMS, Inspection, Other
+    (Status) Scheduled, CheckedIn, InProgress, WaitingParts, Completed, Cancelled, NoShow
+
+  [List WorkOrders] txtWorkOrder, dateDate, linkCustomer, linkVehicle, dropStatus, boolDone, linkTechnician, curEstimate, curTotal, txtNotes
+    (Customer) -> Customers Name
+    (Vehicle) -> Vehicles Plate
+    (Status) Quote, Approved, InProgress, WaitingParts, Ready, Paid, Closed, Cancelled
+    (Technician) -> Staff Name ? Active == True
+
+  [List WorkOrderItems] linkWorkOrder, dropItemType, linkInventory, linkService, txtDescription, numQuantity, curUnitPrice, curLineTotal, dropStatus
+    (WorkOrder) -> WorkOrders WorkOrder
+    (ItemType) Tire, Service, Fee, Discount, Warranty, Other
+    (Inventory) -> Inventory Name
+    (Service) -> Services Name ? Active == True
+    (Status) Pending, Ordered, Installed, Completed, Removed
+
+  [List Inventory] txtName, txtSize, dropBrand, dropType, numCount, numReorder, curUnitCost, curRetailPrice, linkVendor, txtLocation, dropStatus
+    (Brand) Michelin, Goodyear, Bridgestone, Firestone, Continental, Pirelli, Cooper, Hankook, Yokohama, General, Other
+    (Type) AllSeason, Winter, Performance, AllTerrain, MudTerrain, Commercial, UsedTire
+    (Vendor) -> Vendors Name
+    (Status) Active, Discontinued, SpecialOrder
+
+  [List Vendors] txtName, txtPhone, txtEmail, txtAccountNumber, txtContact, boolActive, txtNotes
+
+  [List Payments] dateDate, linkCustomer, linkWorkOrder, dropMethod, curAmount, dropStatus, txtReference, txtNotes
+    (Customer) -> Customers Name
+    (WorkOrder) -> WorkOrders WorkOrder
+    (Method) Cash, Card, Check, Financing, Warranty, Other
+    (Status) Pending, Paid, Refunded, Failed
+
+  [List Services] txtName, dropCategory, curPrice, numDefaultMinutes, boolActive
+    (Category) Install, Repair, Rotation, Balance, Alignment, TPMS, Inspection, Disposal, Other
+
+  [List Staff] txtName, dropRole, txtPhone, txtEmail, boolActive
+    (Role) Manager, ServiceWriter, Technician, Inventory, Admin
+
+  [List Inspections] linkWorkOrder, txtTreadDepth, txtAirPressure, boolTPMS, boolAlignment, txtRecommendations, dropStatus
+    (WorkOrder) -> WorkOrders WorkOrder
+    (Status) Pass, NeedsAttention, Unsafe

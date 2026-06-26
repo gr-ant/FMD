@@ -1,0 +1,42 @@
+[App Name] Wedding Planner
+
+[Display] Home
+  [Title] Wedding Planner
+  [TopMenu] Home, Schedule, Inventory, Vendors, Budget
+  [Main]
+    ((Schedule Timeline)
+        [Button -> Event] New Event
+        [Table -> Schedule] Time, Activity
+    (Inventory Counts)
+        [Counter -> Inventory] Category
+            [Count] Folding Chairs
+            [Count] Round Tables
+            [Counts] Centerpieces, String Lights
+    )
+    ((Vendor Checklist)
+        [Checklist -> Vendors] Name / Status
+    (Budget Summary)
+        [Slider -> Budget] Category Spent / Cap
+            [Slide] Venue
+            [Slide] Catering
+            [Slides] Photography, Flowers
+    )
+[Display] Schedule
+    [cTable -> Schedule] Time, Activity 
+
+[Form -> Schedule] New Event
+    [Field "Start of Event" ()] Time
+    [Fields] Activity, Vendor
+
+[Rule] IsApprovedVendor (Status == True)
+
+[Data]
+  [List Schedule] txtTime, txtActivity, linkVendor
+  (Vendors) -> Vendors Name ? Status
+  [Store Inventory] txtTitle, dropCategory, numCount, curPrice, txtRelated txtVendor
+  [List Vendors] txtName, boolStatus
+  [List Budget] dropCategory, curSpent, curCap, dateDeadline
+  (Category) Venue, Catering, Photography, Flowers
+  [List Venue] txtName, txtLocation, curPrice, numCapacity
+
+  

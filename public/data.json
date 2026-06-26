@@ -1,0 +1,26 @@
+{
+  "schedule": [
+    { "Time": "09:00", "Activity": "Venue setup & decor" },
+    { "Time": "12:30", "Activity": "Catering arrives" },
+    { "Time": "15:00", "Activity": "Ceremony" },
+    { "Time": "18:00", "Activity": "Reception & dinner" }
+  ],
+  "inventory": [
+    { "Title": "Folding Chairs", "Category": "Furniture", "Count": 120, "Price": "$2.50", "Related Vendor": "EventCo Rentals" },
+    { "Title": "Round Tables", "Category": "Furniture", "Count": 15, "Price": "$12.00", "Related Vendor": "EventCo Rentals" },
+    { "Title": "Centerpieces", "Category": "Decor", "Count": 15, "Price": "$45.00", "Related Vendor": "Bloom & Co" },
+    { "Title": "String Lights", "Category": "Decor", "Count": 30, "Price": "$8.00", "Related Vendor": "Lumière" }
+  ],
+  "vendors": [
+    { "Name": "EventCo Rentals", "Status": "Confirmed" },
+    { "Name": "Bloom & Co", "Status": "Confirmed" },
+    { "Name": "Lumière", "Status": "Pending" },
+    { "Name": "Sweet Tier Bakery", "Status": "Pending" }
+  ],
+  "budget": [
+    { "Category": "Venue", "Spent": 8000, "Cap": 8000 },
+    { "Category": "Catering", "Spent": 6200, "Cap": 7000 },
+    { "Category": "Photography", "Spent": 3000, "Cap": 3000 },
+    { "Category": "Flowers", "Spent": 1400, "Cap": 2000 }
+  ]
+}

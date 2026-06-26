@@ -1,0 +1,94 @@
+# Proposal: `[Rollup]` — parent-child aggregate fields
+
+## The gap
+
+Computed fields landed, and they're great — but `[Calc]` is **same-record only**.
+The aggregate functions (`count`/`sum`/`avg`/`min`/`max`) exist, but only as
+Counter KPI items — they produce a single dashboard number, not a value on a row.
+
+The result: the one number a line-item app most needs computed — a parent's total
+rolled up from its children — still can't be expressed. A work order's `Total`
+can't sum its line items; an invoice can't sum its work order; a PO can't sum its
+PO items. Today that number is hand-keyed or fetched from a bound URL. For
+anything transactional (the tire-shop POS being the obvious case), that's *the*
+gap.
+
+## The proposal
+
+A `[Rollup]` line under the **parent** entity in `[Data]`, a sibling of `[Calc]`
+and the option lines. Declare the field normally so it keeps its type/format, then
+bind an aggregate over a child entity to it:
+
+```
+[List WorkOrders] txtTicket, ..., curTotal
+  (Customer) -> Customers Name
+  [Rollup] Total = sum(WorkOrderItems LineTotal)
+```
+
+Same function set as the KPI items (`count`, `sum`, `avg`, `min`, `max`); same
+form, `fn(ChildEntity Field)`, where `count` needs no field. Nothing new to learn.
+
+## Why it's cheap to build
+
+The only new thing the engine needs is *which children belong to this row* — and
+that's **already declared**. `WorkOrderItems.linkTicket` with
+`(Ticket) -> WorkOrders Ticket` is the relationship. The rollup just scopes the
+aggregate to children whose link points back to the current parent row. The link
+line *is* the join — no join syntax in the common case.
+
+## Three refinements that cover the real cases
+
+**1. Filter which children count** — reuses the existing `?` grammar verbatim;
+here it just filters rows, same as everywhere else:
+
+```
+[Rollup] Subtotal = sum(WorkOrderItems LineTotal ? Type != Discount)
+```
+
+**2. Disambiguate** when a child links to the parent more than one way — `via`
+names the child's link field so the engine doesn't guess:
+
+```
+[Rollup] Total = sum(WorkOrderItems LineTotal via Ticket)
+```
+
+**3. Chaining** — this is what makes it useful. A child `[Calc]` can feed a parent
+`[Rollup]`; a parent `[Rollup]` can feed a `[Calc]`. Example:
+
+```
+[Store POItems] linkPO, numQty, curCost, curLineCost
+  (PO) -> PurchaseOrders PO
+  [Calc] LineCost = Qty * Cost            # same-record
+
+[List PurchaseOrders] txtPO, ..., curTotal
+  (Vendor) -> Vendors Name
+  [Rollup] Total = sum(POItems LineCost)  # parent rolls up the child calc
+```
+
+`[Calc]`, `[Rollup]`, and field refs form a dependency graph. Evaluate in
+topological order; reject cycles the same way a bad reference gets underlined
+today.
+
+## Semantics (matching the format's existing ethos)
+
+- **Graceful empties** — no matching children: `sum`/`count` → `0`,
+  `avg`/`min`/`max` → blank. (Mirrors "a malformed rule lets everything through.")
+- **Read-only** — shows `auto` in entry rows, exactly like `[Calc]`.
+- **Single-word field names** — inherits the `[Calc]` constraint: `LineTotal` and
+  `Total`, not `Line Total`.
+- **Recompute on child write** — a write to any child invalidates and recomputes
+  its parent's rollups (and anything chained above). The cascade is bounded by the
+  depth of the dependency graph and stays deterministic.
+
+## What this unlocks (and what it deliberately doesn't)
+
+Model tax and fees as **line-item rows** (`Type = Disposal Fee`, `Tax`) rather
+than formula constants, and `[Rollup] Total = sum(WorkOrderItems LineTotal)` *is*
+the correct ticket total — tires + labor + per-tire fee + tax — with no hardcoded
+rate buried in an expression. Invoices roll up from work orders the same way.
+
+It closes the parent-child gap **without leaving the declarative grammar** and
+without reaching for the URL escape hatch. It is *not* automation — it computes a
+value, it doesn't react to a state change or fire an action. That keeps it on the
+safe side of the line: no event model, no execution-order hazard, no cycles. Just
+the join you already declared, summed.
