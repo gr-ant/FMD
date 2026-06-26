@@ -1,8 +1,8 @@
 import React, { useState, useContext } from 'react'
-import { FormsContext, useRefresh, useRules } from '../data.js'
-import { fieldName } from '../parser.js'
-import { passes } from '../rules.js'
-import { fieldDef } from './format.js'
+import { FormsContext, useRefresh, useRules } from '../../data.js'
+import { fieldName } from '../../parser.js'
+import { passes } from '../../fmd/rules.js'
+import { fieldDef } from '../../fmd/format.js'
 import { TypedInput } from './inputs.jsx'
 import { useFields } from './viz.jsx'
 

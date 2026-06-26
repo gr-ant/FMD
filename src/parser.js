@@ -8,8 +8,8 @@
 //   lint.js    lintReferences -- the editor reference linter
 // -------------------------------------------------------------
 
-export { fieldName, parseFields } from './parse/fields.js'
-export { commentIndex } from './parse/nodes.js'
-export { parseFMD } from './parse/tree.js'
-export { lintReferences } from './parse/lint.js'
-export { collectRules, collectForms, isDataBlock, collectSchema } from './parse/schema.js'
+export { fieldName, parseFields } from './fmd/parse/fields.js'
+export { commentIndex } from './fmd/parse/nodes.js'
+export { parseFMD } from './fmd/parse/tree.js'
+export { lintReferences } from './fmd/parse/lint.js'
+export { collectRules, collectForms, isDataBlock, collectSchema } from './fmd/parse/schema.js'

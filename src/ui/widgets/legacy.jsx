@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { useSource, keysOf, pickField, isNum } from '../data.js'
+import { useSource, keysOf, pickField, isNum } from '../../data.js'
 
 // A (Widget) bound to a data source. It classifies itself by name and
 // visualizes the records pulled from its bound entity.

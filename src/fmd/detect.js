@@ -1,0 +1,21 @@
+// Field detection helpers (so widgets work with any entity shape).
+const isNum = (v) => typeof v === 'number' || (typeof v === 'string' && /^-?\d+(\.\d+)?$/.test(v))
+
+export function keysOf(rows) {
+  return rows && rows.length ? Object.keys(rows[0]) : []
+}
+
+export function pickField(rows, prefer, fallbackPredicate) {
+  const keys = keysOf(rows)
+  for (const re of prefer) {
+    const k = keys.find((key) => re.test(key))
+    if (k) return k
+  }
+  return keys.find((k) => fallbackPredicate(k, rows)) || keys[0] || null
+}
+
+export const firstText = (rows) =>
+  pickField(rows, [], (k, r) => !isNum(r[0][k]))
+export const firstNumber = (rows) =>
+  pickField(rows, [], (k, r) => isNum(r[0][k]))
+export { isNum }

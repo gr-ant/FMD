@@ -1,5 +1,5 @@
 import React, { useRef } from 'react'
-import { commentIndex } from '../parser.js'
+import { commentIndex } from '../../parser.js'
 
 // An editor with an underline overlay: a backdrop renders the source with bad
 // field references underlined, beneath a transparent textarea (scroll-synced).

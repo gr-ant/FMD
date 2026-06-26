@@ -5,10 +5,10 @@ import { FormModal } from './Widget.jsx'
 import { DataContext, SchemaContext, FormsContext, RulesContext } from './data.js'
 import { getConfig, setConfig, deleteConfig } from './config.js'
 import defaultFmd from '../app.fmd?raw'
-import CodeEditor from './app/CodeEditor.jsx'
-import DataInspector from './app/DataInspector.jsx'
-import PageView from './app/PageView.jsx'
-import { findMenu, matchForm } from './app/helpers.js'
+import CodeEditor from './ui/panels/CodeEditor.jsx'
+import DataInspector from './ui/panels/DataInspector.jsx'
+import PageView from './ui/panels/PageView.jsx'
+import { findMenu, matchForm } from './ui/panels/helpers.js'
 
 export default function App() {
   const [source, setSource] = useState(defaultFmd)

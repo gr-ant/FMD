@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
-import { useSource, useRules } from '../data.js'
-import { passes } from '../rules.js'
-import { formatValue, toMoney, toDateInput, fieldDef } from './format.js'
+import { useSource, useRules } from '../../data.js'
+import { passes } from '../../fmd/rules.js'
+import { formatValue, toMoney, toDateInput, fieldDef } from '../../fmd/format.js'
 
 // A controlled input that matches the field's declared type (used by forms and
 // the table's new-row): dropdown, relationship picker, date picker, $ number, text.
