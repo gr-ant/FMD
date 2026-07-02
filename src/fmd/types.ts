@@ -197,6 +197,15 @@ export interface ButtonNode extends BaseNode {
   target: string | null
 }
 
+// A CSV-import button. Clicking opens a modal that lets the user paste/upload a
+// CSV, map its columns to the source's declared fields, preview, and bulk-POST
+// each row. Syntax: [Import -> Source] Label  (alias [CSV -> Source] Label).
+export interface ImportNode extends BaseNode {
+  type: 'Import'
+  label: string
+  source: string | null
+}
+
 // A per-row action button inside a [Table]/[Cases]: [RowButton -> Action] Label
 // (alias [RowAction]). Same label/target shape as [Button], but rendered once per
 // row in a trailing actions column, with THAT row bound as `this` when it runs.
@@ -481,6 +490,7 @@ export type Node =
   | VizNode
   | ItemNode
   | ButtonNode
+  | ImportNode
   | RowButtonNode
   | BulkActionNode
   | FormNode
