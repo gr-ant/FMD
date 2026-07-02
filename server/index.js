@@ -13,9 +13,14 @@
 // -------------------------------------------------------------
 import express from 'express'
 import { init } from './db.js'
+import { registerAuth } from './auth.js'
 import { registerSchemaRoutes } from './schema.js'
 import { registerConfigRoutes } from './config.js'
+import { registerDeployRoutes } from './deploy.js'
+import { registerUserRoutes } from './users.js'
 import { registerCrudRoutes } from './crud.js'
+import { registerExtRoutes } from './ext.js'
+import { registerTriggerRoutes, startTriggerSweep } from './triggers.js'
 
 const PORT = process.env.PORT || 4000
 
@@ -26,13 +31,21 @@ app.use((req, res, next) => {
   next()
 })
 
+// Auth first: attaches req.user (open dev mode when OIDC_ISSUER is unset).
+registerAuth(app)
+
 // Order matters: the reserved `_*` routes must register before `/api/:source`.
 registerSchemaRoutes(app)
 registerConfigRoutes(app)
+registerDeployRoutes(app)
+registerUserRoutes(app)
+registerTriggerRoutes(app) // _triggers/run — before the catch-all /api/:source
+registerExtRoutes(app) // _ext/* — external API data sources, before /api/:source
 registerCrudRoutes(app)
 
 init()
   .then(() => app.listen(PORT, () => console.log(`[fmd-api] listening on :${PORT}`)))
+  .then(() => startTriggerSweep()) // background trigger sweep (every 60s)
   .catch((e) => {
     console.error('[fmd-api] failed to start:', e)
     process.exit(1)

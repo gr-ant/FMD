@@ -5,7 +5,7 @@
 //   [Store X] -> a JSONB COLLECTION  (NoSQL)
 //
 // The frontend just fetches /api/<source>. This service knows, from the seed,
-// whether <source> is a list (table) or a store (documents) and queries the
+// whether <source> is a list (table) or a store (_fmd_documents) and queries the
 // right way. The author never annotates sql/nosql -- it just happens.
 // -------------------------------------------------------------
 import pg from 'pg'
@@ -31,9 +31,12 @@ export function sqlType(values) {
 }
 
 export const q = (id) => `"${String(id).replace(/"/g, '""')}"` // safe quoted identifier
+export const qn = (schema, id) => `${q(schema)}.${q(id)}` // schema-qualified identifier
+// Standard JSON error response (honours an optional e.status / e.body).
+export const sendErr = (res, e) => res.status(e?.status || 500).json({ error: e?.body || e?.message || String(e) })
 
 // FMD field type (from the txt/num/cur/bool/date prefix) -> Postgres column type.
-const SQL_TYPE = { text: 'TEXT', number: 'NUMERIC', currency: 'NUMERIC(12,2)', boolean: 'BOOLEAN', date: 'DATE', drop: 'TEXT', link: 'TEXT' }
+const SQL_TYPE = { text: 'TEXT', memo: 'TEXT', number: 'NUMERIC', currency: 'NUMERIC(12,2)', boolean: 'BOOLEAN', date: 'DATE', drop: 'TEXT', link: 'TEXT', msel: 'TEXT' }
 export const sqlTypeFor = (t) => SQL_TYPE[t] || 'TEXT'
 
 // Every [List] table gets a reserved `_id` row identifier (for CRUD), separate
@@ -55,6 +58,16 @@ export async function listColumns(table) {
 
 export const cleanVal = (v) => (v === '' ? null : v)
 
+// Source names FMD uses for its own tables; a [List]/[Store] can't reuse them.
+export const RESERVED_SOURCES = new Set(['_fmd_documents', '_fmd_configs'])
+// The reserved names a model tries to use (lowercased, de-duped), if any. Any
+// `_`-prefixed name is reserved for FMD internals; `documents`/`configs` are now
+// ordinary, usable entity names.
+export function reservedClash(entities) {
+  const names = (entities || []).map((e) => String(e?.source || '').trim().toLowerCase())
+  return [...new Set(names)].filter((s) => RESERVED_SOURCES.has(s) || s.startsWith('_'))
+}
+
 async function waitForDb(retries = 30) {
   for (let i = 0; i < retries; i++) {
     try {
@@ -67,8 +80,29 @@ async function waitForDb(retries = 30) {
   throw new Error('Database never became reachable')
 }
 
+// One-time migration: move the pre-prefix internal tables into the reserved
+// `_fmd_` namespace, freeing `documents`/`configs` for use as entity names. Runs
+// for the public schema and every deployed app schema; ALTER ... RENAME
+// preserves all rows, and the `old && !new` guard makes it a no-op afterwards.
+async function migrateReserved() {
+  const { rows } = await pool.query(
+    `SELECT schema_name FROM information_schema.schemata
+     WHERE schema_name = 'public' OR schema_name LIKE 'app_%'`)
+  for (const { schema_name: sch } of rows) {
+    for (const [oldN, newN] of [['documents', '_fmd_documents'], ['configs', '_fmd_configs']]) {
+      const oldT = (await pool.query(`SELECT to_regclass($1) AS t`, [`${sch}.${oldN}`])).rows[0].t
+      const newT = (await pool.query(`SELECT to_regclass($1) AS t`, [`${sch}.${newN}`])).rows[0].t
+      if (oldT && !newT) {
+        await pool.query(`ALTER TABLE ${q(sch)}.${q(oldN)} RENAME TO ${q(newN)}`)
+        console.log(`[fmd-api] migrated ${sch}.${oldN} -> ${newN}`)
+      }
+    }
+  }
+}
+
 export async function init() {
   await waitForDb()
+  await migrateReserved()
 
   // [List] entities -> relational tables with inferred column types.
   for (const [name, def] of Object.entries(lists)) {
@@ -95,24 +129,24 @@ export async function init() {
     }
   }
 
-  // [Store] entities -> one JSONB documents table, partitioned by `collection`.
+  // [Store] entities -> one JSONB _fmd_documents table, partitioned by `collection`.
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS documents (
+    CREATE TABLE IF NOT EXISTS _fmd_documents (
       id SERIAL PRIMARY KEY,
       collection TEXT NOT NULL,
       doc JSONB NOT NULL
     )`)
-  await pool.query(`CREATE INDEX IF NOT EXISTS documents_collection_idx ON documents (collection)`)
-  await pool.query(`CREATE INDEX IF NOT EXISTS documents_doc_gin ON documents USING GIN (doc)`)
+  await pool.query(`CREATE INDEX IF NOT EXISTS documents_collection_idx ON _fmd_documents (collection)`)
+  await pool.query(`CREATE INDEX IF NOT EXISTS documents_doc_gin ON _fmd_documents USING GIN (doc)`)
 
   for (const [name, docs] of Object.entries(stores)) {
     const { rows: [{ count }] } = await pool.query(
-      `SELECT COUNT(*)::int AS count FROM documents WHERE collection = $1`, [name],
+      `SELECT COUNT(*)::int AS count FROM _fmd_documents WHERE collection = $1`, [name],
     )
     if (count === 0) {
       for (const doc of docs) {
         await pool.query(
-          `INSERT INTO documents (collection, doc) VALUES ($1, $2)`,
+          `INSERT INTO _fmd_documents (collection, doc) VALUES ($1, $2)`,
           [name, JSON.stringify(doc)],
         )
       }
@@ -121,11 +155,31 @@ export async function init() {
 
   // App config store: arbitrary key -> JSON value (the FMD document, prefs, etc.)
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS configs (
+    CREATE TABLE IF NOT EXISTS _fmd_configs (
       key TEXT PRIMARY KEY,
       value JSONB NOT NULL,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )`)
+
+  // Rebuild the routing map from what is PHYSICALLY in the database, so entities
+  // applied in a previous session (via /api/_apply) keep routing across API
+  // restarts -- the seed alone no longer knows about them. Stores are registered
+  // first, then list tables, so a real table wins any name collision with a
+  // leftover document collection.
+  const { rows: collRows } = await pool.query(`SELECT DISTINCT collection FROM _fmd_documents`)
+  for (const r of collRows) KIND[r.collection] = 'store'
+  const { rows: tableRows } = await pool.query(
+    `SELECT table_name FROM information_schema.tables
+     WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+       AND table_name NOT IN ('_fmd_configs', '_fmd_documents')`)
+  for (const r of tableRows) KIND[r.table_name] = 'list'
+
+  // [API] external sources have no table -- they live in _fmd_configs as `api:<source>`.
+  // Register them so the generic /api/:source GET can optionally route them too
+  // (the canonical read path remains /api/_ext/:source).
+  const { rows: apiRows } = await pool.query(
+    `SELECT key FROM _fmd_configs WHERE key LIKE 'api:%'`)
+  for (const r of apiRows) KIND[r.key.slice('api:'.length)] = 'api'
 
   console.log(`[fmd-api] ready. sources:`, KIND)
 }

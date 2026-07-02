@@ -9,7 +9,12 @@
 # - web  : the Vite dev server (the FMD editor + live preview), with /api
 #          proxied to the api service.
 #
-# Open http://localhost:5173
+# Identity (sign-in + roles) is provided by Authentik, on its OWN Postgres +
+# Redis. Secrets come from .env (git-ignored — see authentik/README.md):
+#   AUTHENTIK_SECRET_KEY, AUTHENTIK_PG_PASS,
+#   AUTHENTIK_BOOTSTRAP_PASSWORD, AUTHENTIK_BOOTSTRAP_EMAIL
+#
+# Open http://localhost:5173   (Authentik admin at http://localhost:9000)
 
 services:
   db:
@@ -33,6 +38,17 @@ services:
     environment:
       DATABASE_URL: postgres://fmd:fmd@db:5432/fmd
       PORT: "4000"
+      # OIDC: who signs users in, and which client this app is. The issuer is the
+      # browser-reachable URL of the Authentik "fmd" application.
+      # NOTE: this is the PUBLIC issuer. From inside the docker network the api
+      # reaches Authentik at http://authentik-server:9000 instead of localhost —
+      # see authentik/README.md "Internal vs public URL".
+      OIDC_ISSUER: http://localhost:9000/application/o/fmd/
+      OIDC_CLIENT_ID: fmd-web
+      # User management: the api reaches Authentik over the docker network and
+      # authenticates with the bootstrap-provisioned admin token. Fully automated.
+      AUTHENTIK_URL: http://authentik-server:9000
+      AUTHENTIK_API_TOKEN: ${AUTHENTIK_BOOTSTRAP_TOKEN:?set AUTHENTIK_BOOTSTRAP_TOKEN in .env}
     depends_on:
       db:
         condition: service_healthy
@@ -48,6 +64,88 @@ services:
       - api
     ports:
       - "5173:5173"
+    # Live source for vite HMR; keep the image's node_modules (anonymous volume).
+    volumes:
+      - ./:/app
+      - /app/node_modules
+
+  # ---------------------------------------------------------------------------
+  # Authentik identity provider (its own Postgres + Redis, kept separate from
+  # the FMD db). First boot creates the "akadmin" superuser from the bootstrap
+  # vars, and applies the blueprint in ./authentik/blueprints.
+  # ---------------------------------------------------------------------------
+  authentik-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: authentik
+      POSTGRES_PASSWORD: ${AUTHENTIK_PG_PASS:?set AUTHENTIK_PG_PASS in .env}
+      POSTGRES_DB: authentik
+    volumes:
+      - authentik-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U authentik"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  authentik-redis:
+    image: redis:alpine
+    command: --save 60 1 --loglevel warning
+    volumes:
+      - authentik-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  authentik-server:
+    image: ghcr.io/goauthentik/server:2024.12.3
+    command: server
+    environment: &authentik-env
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:?set AUTHENTIK_SECRET_KEY in .env}
+      AUTHENTIK_POSTGRESQL__HOST: authentik-postgres
+      AUTHENTIK_POSTGRESQL__USER: authentik
+      AUTHENTIK_POSTGRESQL__NAME: authentik
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_PG_PASS:?set AUTHENTIK_PG_PASS in .env}
+      AUTHENTIK_REDIS__HOST: authentik-redis
+      AUTHENTIK_BOOTSTRAP_PASSWORD: ${AUTHENTIK_BOOTSTRAP_PASSWORD:?set AUTHENTIK_BOOTSTRAP_PASSWORD in .env}
+      AUTHENTIK_BOOTSTRAP_EMAIL: ${AUTHENTIK_BOOTSTRAP_EMAIL:-admin@example.com}
+      # Provisions a fixed admin API token for akadmin on boot — the api service
+      # uses it (as AUTHENTIK_API_TOKEN) to manage users without a manual step.
+      AUTHENTIK_BOOTSTRAP_TOKEN: ${AUTHENTIK_BOOTSTRAP_TOKEN:?set AUTHENTIK_BOOTSTRAP_TOKEN in .env}
+      AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
+      AUTHENTIK_DISABLE_UPDATE_CHECK: "true"
+    volumes:
+      - authentik-media:/media
+      - authentik-templates:/templates
+      - ./authentik/blueprints:/blueprints/custom:ro
+    ports:
+      - "9000:9000"
+      - "9443:9443"
+    depends_on:
+      authentik-postgres:
+        condition: service_healthy
+      authentik-redis:
+        condition: service_healthy
+
+  authentik-worker:
+    image: ghcr.io/goauthentik/server:2024.12.3
+    command: worker
+    environment: *authentik-env
+    volumes:
+      - authentik-media:/media
+      - authentik-templates:/templates
+      - ./authentik/blueprints:/blueprints/custom:ro
+    depends_on:
+      authentik-postgres:
+        condition: service_healthy
+      authentik-redis:
+        condition: service_healthy
 
 volumes:
   pgdata:
+  authentik-pgdata:
+  authentik-redis:
+  authentik-media:
+  authentik-templates:

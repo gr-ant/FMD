@@ -5,3 +5,6 @@ dist
 
 # local notes, proposals, sample .fmd configs (not part of the app)
 scratch/
+
+# secrets
+.env

@@ -1,0 +1,15 @@
+# White-labels the Authentik login page so clients don't see "authentik"
+# branding. Applied automatically by the Authentik worker (the blueprint dir is
+# mounted). Change branding_title / logo to match your own product.
+version: 1
+metadata:
+  name: fmd-brand
+entries:
+  - model: authentik_brands.brand
+    identifiers:
+      domain: authentik-default
+    attrs:
+      branding_title: "Sign in"
+      # To fully white-label, drop a logo into the mounted media dir and point here:
+      # branding_logo: /media/public/your-logo.svg
+      # branding_favicon: /media/public/your-favicon.ico

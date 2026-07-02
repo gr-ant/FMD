@@ -1,0 +1,62 @@
+# Authentik blueprint — auto-applied on boot (mounted at /blueprints/custom).
+# Provisions the FMD identity setup declaratively:
+#   - groups Admin / Staff / Viewer   (these map to FMD [Role] names)
+#   - a public OAuth2/OIDC provider (Authorization Code + PKCE, no secret)
+#   - an application with slug "fmd"   -> issuer http://localhost:9000/application/o/fmd/
+#
+# Blueprint schemas shift between Authentik versions. This targets 2024.12.x
+# (structured redirect_uris). If it fails to apply (check the server logs or
+# Admin > Dashboard > System Tasks > "blueprints"), configure the provider by
+# hand using the values in authentik/README.md — the app only depends on the
+# resulting client_id/redirect/groups, not on how they were created.
+version: 1
+metadata:
+  name: FMD OIDC provisioning
+  labels:
+    blueprints.goauthentik.io/instantiate: "true"
+entries:
+  # --- Groups -> FMD [Role] names ---
+  - model: authentik_core.group
+    identifiers: { name: Admin }
+    attrs: { name: Admin }
+  - model: authentik_core.group
+    identifiers: { name: Staff }
+    attrs: { name: Staff }
+  - model: authentik_core.group
+    identifiers: { name: Viewer }
+    attrs: { name: Viewer }
+
+  # --- Public OIDC provider (PKCE) ---
+  - model: authentik_providers_oauth2.oauth2provider
+    id: fmd-provider
+    identifiers: { name: "FMD Provider" }
+    attrs:
+      name: "FMD Provider"
+      client_type: public           # public client => no secret, PKCE
+      client_id: fmd-web
+      sub_mode: hashed_user_id
+      include_claims_in_id_token: true
+      authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+      invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+      signing_key: !Find [authentik_crypto.certificatekeypair, [name, "authentik Self-signed Certificate"]]
+      redirect_uris:
+        - matching_mode: strict
+          url: http://localhost:5173/auth/callback
+        - matching_mode: regex
+          url: http://localhost:5173/.*
+      # openid + email + profile; the default "profile" mapping includes the
+      # "groups" claim the app reads for roles.
+      property_mappings:
+        - !Find [authentik_providers_oauth2.scopemapping, [scope_name, openid]]
+        - !Find [authentik_providers_oauth2.scopemapping, [scope_name, email]]
+        - !Find [authentik_providers_oauth2.scopemapping, [scope_name, profile]]
+
+  # --- Application (slug "fmd") bound to the provider ---
+  - model: authentik_core.application
+    identifiers: { slug: fmd }
+    attrs:
+      name: FMD
+      slug: fmd
+      provider: !KeyOf fmd-provider
+      meta_launch_url: http://localhost:5173/
+      policy_engine_mode: any

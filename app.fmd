@@ -2,7 +2,7 @@
 
 [Display] Home
   [Title] Wedding Planner
-  [TopMenu] Home, Schedule, Inventory, Vendors, Budget
+  [TopMenu] Home, Schedule, Inventory, Vendors, Budget, Vendor Detail
   [Main]
     ((Schedule Timeline)
         [Button -> Event] New Event
@@ -14,6 +14,7 @@
             [Counts] Centerpieces, String Lights
     )
     ((Vendor Checklist)
+        [Button -> Approve All Vendors] Approve All Vendors
         [Checklist -> Vendors] Name / Status
     (Budget Summary)
         [Slider -> Budget] Category Spent / Cap
@@ -22,7 +23,25 @@
             [Slides] Photography, Flowers
     )
 [Display] Schedule
-    [cTable -> Schedule] Time, Activity 
+    [cTable -> Schedule] Time, Activity, Vendor, VendorStatus   # VendorStatus is a [Lookup]
+
+[Display] Budget
+    [Title] Budget
+    [Main]
+      ((Budget by Status)
+        [Table -> Budget] Category, Spent, Cap, Remaining, Pace   # Remaining/Pace are [Calc]
+          [Sort] Spent desc
+          [Group] Pace
+          [Foot] sum Spent, sum Cap, count
+      )
+
+[Display] Vendor Detail
+    [Title] Vendor Detail
+    [Main]
+      ((Vendor)
+        [Detail -> Vendors] Name, Status
+          [Table -> Schedule ? Vendor == this.Name] Time, Activity
+      )
 
 [Form -> Schedule] New Event
     [Field "Start of Event" ()] Time
@@ -30,13 +49,19 @@
 
 [Rule] IsApprovedVendor (Status == True)
 
+[Action] Approve All Vendors
+  [Update -> Vendors ? Status == False] Status = true
+
 [Data]
   [List Schedule] txtTime, txtActivity, linkVendor
   (Vendors) -> Vendors Name ? Status
+  [Lookup] VendorStatus = Vendor.Status          # pull the vendor's Status onto each row
   [Store Inventory] txtTitle, dropCategory, numCount, curPrice, txtRelated txtVendor
   [List Vendors] txtName, boolStatus
-  [List Budget] dropCategory, curSpent, curCap, dateDeadline
+  [List Budget] dropCategory, curSpent, curCap, dateDeadline, curRemaining, txtPace
   (Category) Venue, Catering, Photography, Flowers
+  [Calc] Remaining = Cap - Spent
+  [Calc] Pace = if(Spent > Cap, "over", "ok")
   [List Venue] txtName, txtLocation, curPrice, numCapacity
 
   

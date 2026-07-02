@@ -1,10 +1,13 @@
 // The one endpoint the frontend uses plus CRUD. Routes by storage kind.
 import { pool, KIND, q, listColumns, cleanVal } from './db.js'
+import { guard } from './permissions.js'
+import { fetchExternal } from './ext.js'
 
 export function registerCrudRoutes(app) {
   // The one endpoint the frontend uses. Routes by storage kind automatically.
   app.get('/api/:source', async (req, res) => {
     const { source } = req.params
+    if (!(await guard(req, res, source, 'GET'))) return
     const kind = KIND[source]
     try {
       if (kind === 'list') {
@@ -13,9 +16,16 @@ export function registerCrudRoutes(app) {
       }
       if (kind === 'store') {
         const { rows } = await pool.query(
-          `SELECT id, doc FROM documents WHERE collection = $1 ORDER BY id`, [source],
+          `SELECT id, doc FROM _fmd_documents WHERE collection = $1 ORDER BY id`, [source],
         )
         return res.json(rows.map((r) => ({ ...r.doc, _id: r.id })))
+      }
+      if (kind === 'api') {
+        // External API source: read its config and fetch live (canonical path is
+        // /api/_ext/:source; this lets /api/:source resolve it too). Read-only.
+        const { rows } = await pool.query(`SELECT value FROM _fmd_configs WHERE key = $1`, [`api:${source.toLowerCase()}`])
+        if (!rows.length) return res.status(404).json([])
+        return res.json(await fetchExternal(rows[0].value))
       }
       return res.status(404).json([])
     } catch (e) {
@@ -28,6 +38,7 @@ export function registerCrudRoutes(app) {
   app.post('/api/:source', async (req, res) => {
     const { source } = req.params
     if (source.startsWith('_')) return res.status(404).json({ error: 'reserved' })
+    if (!(await guard(req, res, source, 'POST'))) return
     const kind = KIND[source]
     const body = req.body || {}
     try {
@@ -44,7 +55,7 @@ export function registerCrudRoutes(app) {
       if (kind === 'store') {
         const doc = { ...body }; delete doc._id
         const { rows } = await pool.query(
-          `INSERT INTO documents (collection, doc) VALUES ($1, $2) RETURNING id, doc`, [source, JSON.stringify(doc)])
+          `INSERT INTO _fmd_documents (collection, doc) VALUES ($1, $2) RETURNING id, doc`, [source, JSON.stringify(doc)])
         return res.json({ ...rows[0].doc, _id: rows[0].id })
       }
       return res.status(404).json({ error: 'unknown source' })
@@ -54,6 +65,7 @@ export function registerCrudRoutes(app) {
   // Update a record by its _id. Body is the changed fields.
   app.patch('/api/:source/:id', async (req, res) => {
     const { source, id } = req.params
+    if (!(await guard(req, res, source, 'PATCH'))) return
     const kind = KIND[source]
     const body = req.body || {}
     try {
@@ -68,7 +80,7 @@ export function registerCrudRoutes(app) {
       }
       if (kind === 'store') {
         const patch = { ...body }; delete patch._id
-        await pool.query(`UPDATE documents SET doc = doc || $2::jsonb WHERE id = $1`, [id, JSON.stringify(patch)])
+        await pool.query(`UPDATE _fmd_documents SET doc = doc || $2::jsonb WHERE id = $1`, [id, JSON.stringify(patch)])
         return res.json({ ok: true })
       }
       return res.status(404).json({ error: 'unknown source' })
@@ -78,10 +90,11 @@ export function registerCrudRoutes(app) {
   // Delete a record by its _id.
   app.delete('/api/:source/:id', async (req, res) => {
     const { source, id } = req.params
+    if (!(await guard(req, res, source, 'DELETE'))) return
     const kind = KIND[source]
     try {
       if (kind === 'list') { await pool.query(`DELETE FROM ${q(source)} WHERE "_id" = $1`, [id]); return res.json({ ok: true }) }
-      if (kind === 'store') { await pool.query(`DELETE FROM documents WHERE id = $1`, [id]); return res.json({ ok: true }) }
+      if (kind === 'store') { await pool.query(`DELETE FROM _fmd_documents WHERE id = $1`, [id]); return res.json({ ok: true }) }
       return res.status(404).json({ error: 'unknown source' })
     } catch (e) { return res.status(500).json({ error: String(e) }) }
   })

@@ -69,6 +69,75 @@ inside quotes — so `[Field "Issue #5"]` keeps its `#`.
 
 ---
 
+## 2a. Theming — `[Style]`
+
+A top-level **`[Style]`** block themes the rendered app (the preview and the
+deployed `/app/<slug>`) — not the editor itself. Use **`[Size]`** for the page
+width and a **`[Colors]`** sub-block of color tags:
+
+```
+[Style]
+  [Size] Full
+  [Font] Poppins
+  [Colors]
+    [Primary] #ff5a5f
+    [Background] #0d1117
+    [Text] #e6edf3
+```
+
+**`[Font]`** — the app font. Keywords use built-in stacks (no download):
+`System`/`Sans`, `Serif`, `Mono`. Any other name is treated as a **Google Font**
+(e.g. `Inter`, `Poppins`, `Roboto`, `Lato`, `Merriweather`) and loaded
+automatically — an unknown name simply falls back to a sans-serif.
+
+**`[Size]`** — the content width: **`Compact`** (~760px, narrow/reading),
+**`Standard`** (~1100px, the default), or **`Full`** (edge-to-edge, fills the screen).
+
+**`[Colors]`** — each child tag maps to a theme role. Values can be a CSS color
+name (`White`), `#hex` (the `#` is fine here — it's not treated as a comment), or
+a bare hex (`ff5a5f`):
+
+| Tag | What it colors |
+|-----|----------------|
+| `[Primary]` | buttons, active tabs, links, the brand accent |
+| `[Secondary]` | secondary accents / highlights |
+| `[Background]` | the app page background |
+| `[Surface]` | panels, tables, menus — **and `( )` card interiors** |
+| `[Card]` | just the `( )` widget/card interior (so cards can differ from other surfaces) |
+| `[Text]` | primary body text |
+| `[Heading]` | prominent labels — the app name, page/list titles, KPI values |
+| `[Muted]` | secondary / subtle text (field labels, table headers, captions) |
+| `[ButtonText]` | the text **on** buttons (which sit on `[Primary]`) |
+| `[Border]` | borders and dividers |
+
+Set only the tags you want — anything omitted keeps the default dark theme. The
+style applies to the whole app subtree (no per-page styling yet).
+
+## 2b. Variables — `[_Name] = value`
+
+Define a **reusable constant** once and reference it anywhere by name — so you
+don't repeat the same color, label, condition, or source over and over. A
+variable name starts with an underscore; every later `_Name` token is replaced
+with its value **before** the document is parsed:
+
+```
+[_Accent]   = #ff5a5f
+[_Open]     = Status == "Open"
+[_Brand]    = Acme Field Service
+
+[Style]
+  [Colors]
+    [Primary] _Accent
+[Display] Orders
+  [Title] _Brand
+  [Table -> Orders ? _Open] Customer, Total       # reuse the same filter everywhere
+```
+
+- The value is everything after `=` (a color, string, condition, number, source…).
+- A variable's value may reference **earlier** variables (`[_Hi] = Welcome to _Brand`).
+- Substitution is whole-token: `_Brand` is replaced, but `My_Brand` is left alone.
+- Definition lines aren't rendered — they just feed the expansion.
+
 ## 3. Pages and navigation
 
 Each top-level **`[Display] Name`** block is a **page**. The **`[Top Menu Bar]`**
@@ -97,7 +166,7 @@ lists tab names; clicking a tab shows the `[Display]` whose name matches.
 
 | Tag | Meaning |
 |-----|---------|
-| `[App Name] text` | The app's global title (shown on top, above the pages). Renaming it **fully rewrites the database** — see §11. |
+| `[App Name] text` | The app's global title (shown on top, above the pages). Renaming it **fully rewrites the database** — see §13. |
 | `[Display] Name` | A page. The root of what is rendered. |
 | `[Title] text` | A heading. |
 | `[Top Menu Bar] a, b, c` | Navigation tabs (also `[TopMenu]` / `[Menu]` / `[Nav]`). |
@@ -153,6 +222,15 @@ Result: two cards side by side in the first row, one card in the second.
 > A "New …" button that belongs to a specific view can also sit inside that
 > view's card (above its table).
 
+**`( )` and `[ ]` are interchangeable for a view.** `(Table -> Schedule)` renders
+the same table as `[Table -> Schedule]` — any viz keyword works in parentheses
+(`(Board -> X)`, `(Calendar -> X)`, …). The difference: the `[ ]` form takes a
+column spec after the bracket (`[Table -> X] ColA, ColB`); the bare `( )` form
+shows all columns. Use a `((Card))` wrapper only to put a **titled card** around a
+view. A `(Name -> source)` whose name **isn't** a viz keyword (e.g.
+`(Inventory Counts -> inventory)`) is an auto-classified widget that picks a
+visualization from words in its name.
+
 ---
 
 ## 5. Visualizations
@@ -168,6 +246,23 @@ A table. The spec is the comma-separated **columns** to show. Shows every record
 ```
 [Table -> Schedule] Time, Activity
 ```
+
+**Sort, group & totals.** A table accepts three **indented sub-directives**
+(their own lines beneath it, keeping the binding clean):
+
+```
+[Table -> WorkOrders] Ticket, Customer, Total
+    [Sort] Date desc            # order rows; `asc` (default) or `desc`
+    [Group] Status              # collapse into sections, one per value, with a count
+    [Foot] sum Total, count     # a footer row of column aggregates
+```
+
+- `[Sort] Field [asc|desc]` — sorts rows by a column (numbers numerically, text
+  alphabetically; computed `[Calc]` columns work too).
+- `[Group] Field` — splits the table into labelled sections by that field's
+  value. With a `[Foot]` present, each group also gets a **subtotal** row.
+- `[Foot] fn Field, …` — a footer of aggregates: `sum`/`avg`/`min`/`max Field`,
+  or bare `count`. Each lands under its column; `count` sits in the first column.
 
 ### `[Counter -> Source] SubField`
 Stat cards. You **list which records to show** with `[Count]` items (§6); each
@@ -213,7 +308,57 @@ A month calendar placing each record on its `DateField` day.
 ```
 
 > **A visualization needs an explicit `-> Source`.** Without it, it renders empty.
-> Any view can also take a `? condition` to filter its rows (see §10).
+> Any view can also take a `? condition` to filter its rows (see §12).
+
+### `[Detail -> Source] colA, colB`
+
+A **single-record** view: a record picker, the chosen record's fields, then any
+**nested views** beneath it. Inside a nested view's `? condition`, the token
+`this` refers to the chosen record — so a detail can show a record together with
+its related children:
+
+```
+[Detail -> WorkOrders] Ticket, Customer, Total
+    [Table -> WorkOrderItems ? Ticket == this] Description, LineTotal
+    [Table -> Payments ? WorkOrder == this.Ticket] Date, Amount
+```
+
+- The spec lists the **header fields** to show (computed/lookup fields included).
+- A dropdown at the top chooses which record (defaults to the first).
+- `this` resolves to the chosen record: a bare `this` means "the parent's value
+  of the field on the other side of the comparison" (`Ticket == this` → the
+  parent's `Ticket`); `this.Field` reads a named field explicitly.
+
+### `[Cases -> Source] colA, colB` — a master-detail list
+
+A **`[Cases]`** view is a **table** of records whose **first column is a link**.
+Clicking it opens that record's **"case"** — a full drill-in page built from the
+`[Cases]` block's indented children (anything a `[Display]` has), with `this`
+bound to that record. A **← Back** returns to the list.
+
+```
+[Cases -> Users] Name, Email, Status
+    [View -> Edit User] Profile                  # read-only form of this user
+    [Title] [[Name]]'s tickets                   # [[Field]] inlines a value (see below)
+    (Table -> Tickets ? Owner == this)           # nested view scoped to the case
+```
+
+It's `[Detail]` turned inside-out: instead of a dropdown picker, you pick a record
+by clicking it in a table, and the detail is a drill-in page rather than inline.
+The same `this` rules apply to nested views.
+
+### `[View -> FormName]` — a form as read-only info
+
+Renders a declared **`[Form]`'s fields read-only** (label + value, no inputs or
+buttons) for the **current case record**. Use it inside a `[Cases]`/`[Detail]` to
+show a record's details with the same field layout as its edit form. Optional
+trailing text is a heading.
+
+### `[[Field]]` — inline a field's value as text
+
+Inside a case, write **`[[FieldName]]`** in any `[Title]`, `[Text]`, or label and
+it's replaced with that record's value — e.g. `[Title] [[Name]]'s tickets`. A
+missing field renders empty; outside a case the token is left as-is.
 
 ---
 
@@ -329,6 +474,26 @@ only when the condition is true (evaluated against the form's current values):
 
 Hidden fields aren't submitted and aren't required while hidden.
 
+**Read-only fields** — prefix the field name with a lowercase `r` (followed by
+the Capitalized name) to show a value the user can't edit. Combines with `!`:
+
+```
+[Field] rDescription             # shown, not editable
+[Field "Internal"] !rNote        # required + read-only (paired with auto-fill below)
+```
+
+**Auto-fill** — bind a field with `-> value` and it's pre-populated when the form
+opens. Pair with `r` to lock it. The value is either a token or a quoted literal:
+
+```
+[Field -> CurrentUser] rSubmittedBy   # the signed-in user's name (dev mode: blank)
+[Field -> "Accepted"] rStatus         # a literal string
+[Field -> Today] rDate                # today's date (also: Now = timestamp)
+```
+
+Tokens: `CurrentUser`, `Today`, `Now`. Anything in `"quotes"` (or a bare word) is
+a literal. Auto-filled values are submitted like any other field.
+
 Each input renders by the field's declared type: a `drop` field becomes a
 dropdown, a `link` field becomes a relationship picker (filtered by its `?`
 rule), everything else is a text box. **Submit** creates the record and the UI
@@ -361,7 +526,115 @@ Putting it together:
 
 ---
 
-## 9. The data model — `[Data]`
+## 9. Actions — buttons that write data
+
+A **form** creates one record from user input (§8). An **action** is the other
+thing a button can do: run a named, fixed sequence of **writes** on click — no
+modal, no typing. Reach for it for one-tap operations like "Approve all", "Mark
+ready", or "Archive completed".
+
+### Defining an action
+
+Declare an action at the **top level** (a sibling of `[Form]` and `[Display]`),
+then list its steps indented beneath it:
+
+```
+[Action] Approve All Vendors
+  [Update -> Vendors ? Status == False] Status = true
+```
+
+Run it from a button whose `-> target` (or label) names the action:
+
+```
+[Button -> Approve All Vendors] Approve All Vendors
+```
+
+A `[Button]` opens a `[Form]` when its target is a form (§8); when the target is
+an **action**, the same button runs it instead (actions are matched first). Put
+the button anywhere a view can go — on a page or inside a widget card.
+
+### The three write steps
+
+Each step targets an entity with `-> Source` and runs against the database in
+order, top to bottom. When all steps finish, the UI refetches so every view
+reflects the writes.
+
+```
+[Create -> Schedule] Activity = "Setup", Time = now      # insert one new record
+[Update -> Vendors ? Status == False] Status = true      # patch all matching rows
+[Delete -> Drafts ? Stale == True]                       # remove all matching rows
+```
+
+- `[Create -> Source] Field = value, …` — inserts **one** record with the given
+  field values.
+- `[Update -> Source ? cond] Field = value, …` — sets those fields on **every**
+  row matching `cond`.
+- `[Delete -> Source ? cond]` — deletes **every** row matching `cond`.
+
+The `? condition` uses the same rules engine as view filters and `[Rule]`s
+(§10), and it is the **safety**: it chooses which rows a step touches. An
+`[Update]` or `[Delete]` **with no `? condition` matches every row** in the
+source — always filter unless you truly mean "all".
+
+### Values
+
+The right-hand side of `Field = value` is evaluated per row:
+
+- **Literals** — `"a string"`, `42`, `true` / `false`.
+- **Dates** — `today` and `now`, with day math: `today + 7`, `now - 1`.
+- **Another field** — a bare field name copies that field's current value
+  (`Status = PriorStatus`).
+- **Arithmetic** — `+ - * / ( )` over the row's numeric fields, exactly like
+  `[Calc]` (§10): `Count = Count + 1`, `Total = Qty * UnitPrice`.
+
+### What it deliberately doesn't do (yet)
+
+- **No per-row context.** A button sits on a page, not on a table row, so a step
+  acts on whatever its `?` filter selects — there is no implicit "this row".
+  (A **`[Trigger]`** — next section — *does* give steps a per-record context.)
+- **Writes need the backend.** Like every data write, steps hit the API/database;
+  with the offline `data.json` fallback (no API running) they have nowhere to go.
+
+To run steps **automatically** (when a condition becomes true, not on a click),
+use a `[Trigger]` instead of a `[Button]` — see the next section.
+
+---
+
+## 9a. Triggers — run steps automatically
+
+A **trigger** runs steps on its own when records match a condition — no button.
+Use it for automations like "flag overdue checkouts" or "archive closed tickets".
+
+```
+[Trigger -> Checkouts ? DueDate < today && Overdue == False] Mark overdue
+    [Update] Overdue = True
+    [Create -> OverdueLog] Item = Title, Due = DueDate
+```
+
+- `[Trigger -> Source ? condition] Label` — declare it at the **top level** (a
+  sibling of `[Data]`/`[Action]`). It scans `Source` and, for **each record**
+  matching `condition`, runs the indented steps with that record as context.
+- **Steps default to the matched record.** Under a trigger, an `[Update]` or
+  `[Delete]` with **no `-> source`** acts on the matched record itself; a
+  `[Create -> Other]` (or any step naming a source) writes there, reading the
+  matched record's fields (`Item = Title` copies the checkout's Title).
+- Steps, values, and the `? condition` work exactly as in §9.
+
+**When triggers fire:** the **server** evaluates every trigger on a **60-second
+sweep** — so a time-based condition like "past due" fires within a minute of
+becoming true **even when nobody has the app open** (it runs against the editor's
+data and every deployed `/app/<slug>`). They also run **right after each action**
+(the app pokes the server, then refetches), so effects show immediately while
+you're using it. *(Editor triggers fire only after you **Save → rebuild DB**,
+which is when they're sent to the server.)*
+
+**Make conditions self-limiting** so a trigger doesn't re-fire forever: include a
+guard the trigger itself clears. Above, `&& Overdue == False` means once a row is
+flagged it no longer matches — so it's marked, and logged, exactly **once**.
+
+---
+
+## 10. The data model — `[Data]`
 
 The `[Data]` block declares your entities. There are two kinds, and **the kind
 you choose decides where it's stored** — you never write "SQL" or "NoSQL":
@@ -385,13 +658,15 @@ type; the rest is the field's display name.
 
 | Prefix | Type | `numCount` → name | column type |
 |--------|------|-------------------|-------------|
-| `txt` | text | `txtTime` → **Time** | text |
+| `txt` | text (single line) | `txtTime` → **Time** | text |
+| `memo` | large/multi-line text | `memoNotes` → **Notes** | text (renders a textarea) |
 | `num` | number | `numCount` → **Count** | numeric |
 | `cur` | currency | `curPrice` → **Price** | numeric(12,2) |
 | `bool` | boolean | `boolDone` → **Done** | boolean |
 | `date` | date | `dateDeadline` → **Deadline** | date |
 | `drop` | dropdown | `dropCategory` → **Category** | text (+ option list) |
 | `link` | relationship | `linkVendor` → **Vendor** | text (+ linked entity) |
+| `msel` | multi-select | `mselTags` → **Tags** | text (+ option list) |
 
 **Multi-word field names:** only the **first** word needs the prefix —
 `txtRelated Vendor` → the single field **"Related Vendor"**. Prefixing every word
@@ -402,23 +677,51 @@ No prefix? The field is treated as text.
 
 **How each type renders:** `cur` → `$8,000.00`, `date` → `Jun 25, 2026` (date
 picker on input), `bool` → a **Yes/No checkbox**, `drop` → dropdown, `link` →
-relationship picker. You store the raw value; the UI formats/edits it by type.
+relationship picker, `msel` → checkbox chips, `memo` → a multi-line **textarea**
+(resizable). Use `memo` for descriptions, notes, addresses — anything longer than
+a single line; plain `txt` is a one-line input. You store the raw value; the UI
+formats/edits it by type.
 (Editable cells show the formatted value and reveal the raw value when clicked.)
 
 ### Computed fields — `[Calc]`
 
-A field can be **computed** from other fields on the same record. Declare the
-field normally (so it has a type/format), then add a `[Calc]` line under the
-entity binding an arithmetic expression to it:
+A field can be **computed** from other fields on the same record. A `[Calc]` line
+**declares its own field** — you don't need to also list it in the entity header
+(the same as `[Rollup]` and `[Lookup]`). A `[Calc]` can yield a **string, date, or
+number**, so an auto-created Calc field defaults to **text** (it shows the
+computed value as-is). List the field in the header **only** to pin a
+type/format — `curLineTotal` for currency, `dateDue` for a date. (A `[Rollup]` is
+always a numeric aggregate, so it defaults to a number.)
 
 ```
-[Store WorkOrderItems] numQty, curUnitPrice, curLineTotal
-  [Calc] LineTotal = Qty * UnitPrice
+[Store WorkOrderItems] numQty, curUnitPrice
+  [Calc] LineTotal = Qty * UnitPrice          # LineTotal is created automatically
+
+[Store Invoices] curTotal                     # declare curTotal to format it as currency
+  [Calc] Total = Subtotal + Tax
 ```
 
-Operators `+ - * / ( )`; operands are numbers or **single-word** field names.
-The value is computed live (read-only — it shows as `auto` in entry rows), so it
-never goes stale. Use single-word field names in formulas.
+A `[Calc]` does more than arithmetic — it can build a label, age a date, or
+branch:
+
+```
+[Calc] Vehicle  = Year + " " + Make + " " + Model     # string concatenation
+[Calc] DaysOpen = today - Date                         # date difference (in days)
+[Calc] Due      = Date + 7                             # date + N days -> a date
+[Calc] Tier     = if(Total > 1000, "VIP", "Standard")  # conditional (or Total > 1000 ? "VIP" : "Standard")
+```
+
+- **Numbers** — `+ - * / ( )`.
+- **Strings** — `+` concatenates when either side is text; helpers `upper()`,
+  `lower()`.
+- **Dates** — `today`/`now`; `date - date` → whole days; `date + N` / `date - N`
+  → a shifted date.
+- **Comparisons & logic** — `== != < <= > >=`, `&&`, `||`, used inside
+  `if(cond, a, b)` or a `cond ? a : b` ternary. `round()` rounds a number.
+
+Operands are numbers, `"strings"`, or **single-word** field names. The value is
+computed live (read-only — it shows as `auto` in entry rows), so it never goes
+stale.
 
 ### Roll-ups — `[Rollup]` (parent totals from children)
 
@@ -452,6 +755,24 @@ the correct total — no hardcoded rates.
 > **Join caveat:** the link matches on the parent's *display value* (e.g. the
 > `WorkOrder` number), so that field must be **unique per parent** for the rollup
 > to attach the right children.
+
+### Lookups — `[Lookup]` (pull a value across a link)
+
+Where `[Rollup]` aggregates *many* children onto a parent, a `[Lookup]` pulls a
+*single* field from the entity a row **links to** — e.g. show a customer's phone
+on each work-order row without re-typing it. Add it under the entity that has the
+link:
+
+```
+[List WorkOrders] txtTicket, linkCustomer, curTotal
+  (Customer) -> Customers Name          # the link being followed
+  [Lookup] CustomerPhone = Customer.Phone
+```
+
+`[Lookup] Name = LinkField.TargetField` — `LinkField` is a `link` field on this
+entity; `TargetField` is a field on the entity it points at. The name becomes a
+referenceable (read-only) field you can put in any table column. It resolves per
+row at render time (so it isn't sortable/groupable/totalled like a stored field).
 
 ### Dropdowns, relationships, and option lists
 
@@ -543,7 +864,88 @@ filters, and form show-if conditions alike.
 
 ---
 
-## 10. Bindings and field references
+## 11. Roles & permissions
+
+Roles control two things: **who can read/write data** (server-enforced) and
+**which elements are visible** (in the UI).
+
+### Declaring roles — `[Permissions]`
+
+Declare the roles your app uses in a top-level `[Permissions]` block:
+
+```
+[Permissions]
+  [Role] Admin
+  [Role] Supervisor
+  [Role] Viewer
+```
+
+These are the roles that appear when you assign users (see *User management*
+below) and that you reference everywhere else.
+
+### Granting CRUD — `[Permission]` inside `[Data]`
+
+Grant access per entity with `{Role} verbs` lines in a `[Permission]` block under
+the entity. Verbs are **Read, Create, Update, Delete** (`Write` = Create,
+`Modify` = Update):
+
+```
+[Data]
+  [List Orders] txtItem, curTotal
+    [Permission]
+      {Admin} Read, Create, Update, Delete
+      {Supervisor} Read, Create
+      {Viewer} Read
+```
+
+- One line may grant several roles: `{Supervisor, Viewer} Read`.
+- The **API rejects** unauthorized writes (a Viewer's create → 403). GET = Read,
+  POST = Create, PATCH = Update, DELETE = Delete.
+- An entity with **no `[Permission]` block is open** to everyone (backward
+  compatible) — add a block only where you want to restrict.
+
+### Hiding elements — `{Role, !Role}` on any tag
+
+Append a `{ }` block to **any** element — `[Tag]` lines **and** `( )` widgets /
+cards alike — to control visibility by role. Bare names **allow**, `!name`
+**denies**; if only denials are present, everyone else is allowed. Hiding an
+element hides its entire subtree:
+
+```
+[Table -> Orders {Supervisor, !Viewer}] Item, Total   # only Supervisor (never Viewer)
+[Button -> New Order {!Viewer}] New Order             # everyone except Viewer
+
+(Card) {Admin}                  # the whole card — and everything in it — only for Admin
+  (Counter -> Orders)
+{Staff} (Board -> Tickets)      # the block may lead or trail the ( ) header
+```
+
+**Tip:** while authoring, use the editor header's **👁 as** selector to preview
+the UI as any declared role (or “Signed out”) without deploying — that's how you
+confirm a `{ }` block hides what you expect.
+
+### Where roles come from
+
+Roles map to the signed-in user's groups from the identity provider (Authentik).
+**In dev (no sign-in configured) the role is `*`** — everything is visible and
+all CRUD is allowed, so you can build without logging in. Enforcement and hiding
+take effect once sign-in is turned on.
+
+### User management — `[User Management]`
+
+Add a button that opens an in-app window to add/edit/delete users and assign them
+the roles you declared — no identity-provider admin UI required:
+
+```
+[Display] Admin
+  [User Management] Manage Users
+```
+
+The role checkboxes are exactly your `[Permissions]` roles.
+
+---
+
+## 12. Bindings and field references
 
 **Binding** connects a view to a data entity:
 
@@ -570,7 +972,7 @@ against typos.
 
 ---
 
-## 11. Where the data comes from
+## 13. Where the data comes from
 
 Records are **never** in the `.fmd` file. They load at runtime from the database
 (via the app's API), or from a bound URL. The document is the *contract*; the
@@ -598,7 +1000,7 @@ on Save, so your edits survive a reload; "Reset to file" reloads the bundled
 
 ---
 
-## 12. Cheat sheet
+## 14. Cheat sheet
 
 ```
 PAGES
@@ -619,6 +1021,12 @@ VISUALIZATIONS (indented under a card; binding inside the brackets)
   [Slider   -> Src] Label Spent / Cap   + [Slide]/[Slides] items
   [Board    -> Src] GroupField      kanban grouped by a field
   [Calendar -> Src] DateField       month calendar on a date field
+  [Detail   -> Src] col, col        one chosen record + nested views (`this`)
+
+TABLE EXTRAS (indented under a [Table])
+  [Sort] Field desc                 order rows (asc default)
+  [Group] Field                     sections by value (+ subtotals with [Foot])
+  [Foot] sum Amount, count          footer of column aggregates
 
 ITEMS
   [Count] Label      [Counts] A, B     (for [Counter])
@@ -633,7 +1041,24 @@ FORMS & BUTTONS
     [Field "Label"] field          one input (quotes = label)
     [Field "L" (cond)] field       show this field only when cond is true
     [Fields] !Name, Phone          several inputs;  !name = required
+    [Field] rNote                  r prefix = read-only (not editable)
+    [Field -> CurrentUser] rBy     auto-fill: CurrentUser / Today / Now / "literal"
   [Button -> target] Label         a button that opens the matching form
+                                   (or runs an [Action] of that name)
+
+ACTIONS (a button runs a named write sequence; top-level, like [Form])
+  [Action] Name                    define; list write steps indented below
+    [Create -> Src] F = v, F = v   insert one record
+    [Update -> Src ? cond] F = v   set fields on every row matching cond
+    [Delete -> Src ? cond]         delete every row matching cond
+  values: "text" · 12 · true · today/now (+N) · OtherField · Qty * Price
+  no ? filter on update/delete = ALL rows;  writes need the backend
+
+TRIGGERS (run steps automatically on the SERVER — every 60s + after each action)
+  [Trigger -> Src ? cond] Label     for each Src record matching cond, run steps
+    [Update] F = v                  no source = act on the MATCHED record
+    [Create -> Other] F = Field     create elsewhere, reading the matched record
+  make cond self-limiting (e.g. ...&& Done == False) so it fires once per record
 
 CONDITIONS (same syntax everywhere)
   [Viz -> Source ? cond] ...       filter the rows a view shows
@@ -646,8 +1071,19 @@ CONDITIONS (same syntax everywhere)
 DATA MODEL
   [List Name] fields     -> SQL table
   [Store Name] fields    -> JSONB collection
-  [Calc] Field = Qty * UnitPrice    computed field (+ - * / ( ), single-word fields)
+  [Calc] Field = Qty * UnitPrice    computed: numbers, "strings", dates, if(c,a,b)
   [Rollup] Total = sum(Children Field ? cond via Link)   parent total from children
+  [Lookup] CustPhone = Customer.Phone   pull a field across a link (read-only)
+
+ROLES & PERMISSIONS
+  [Permissions]                 declare roles
+    [Role] Admin
+  [List Orders] ...             grant CRUD per entity (verbs: Read/Create/Update/Delete)
+    [Permission]
+      {Admin} Read, Create, Update, Delete
+      {Viewer} Read
+  {Role, !Role} on any tag      visibility: allow / !deny (deny-only = everyone else)
+  [User Management] Label       button → in-app add/edit/delete users + assign roles
 
 FIELD TYPE PREFIXES
   txt text · num number · cur currency · bool boolean · date date
@@ -671,7 +1107,7 @@ RULES
 
 ---
 
-## 13. A complete annotated example
+## 15. A complete annotated example
 
 ```
 [Display] Home                                  # page 1 (the "Home" tab)
@@ -715,7 +1151,7 @@ database matches your model.
 
 ---
 
-## 14. Tips & gotchas
+## 16. Tips & gotchas
 
 - **Indent consistently.** Mixing widths breaks nesting; 2 spaces per level is
   the convention. And **close every row**: each `((` needs a matching `)` on its
@@ -723,6 +1159,9 @@ database matches your model.
 - **Don't double up create paths.** A `[Button]`+`[Form]` *and* a `cudTable` for
   the same entity in the same view is redundant — pick one (form for user
   screens, `cudTable` for admin).
+- **Always filter an `[Action]` update/delete.** A step with no `? condition`
+  rewrites or deletes **every** row in the source. Write the `?` filter that
+  scopes it (`? Status == False`) unless you genuinely mean all of them.
 - **Titles are display text — use spaces.** `(Card Title)`, `[Title]`,
   `[App Name]`, menu items, and dropdown *values* are labels: write them readably
   (`(Today Appointments)`, not `(TodayAppointments)`). Only **entity names**
