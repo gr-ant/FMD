@@ -198,6 +198,11 @@ export function apiFetch(url: string, opts: RequestInit = {}): Promise<Response>
   const token = getToken()
   if (token) headers.set('Authorization', `Bearer ${token}`)
   if (previewRoles != null) headers.set('X-FMD-Roles', previewRoles.join(','))
+  // The display name the client decoded from its own sign-in token, for the audit
+  // trail. The server trusts it ONLY in open dev mode (never in a secured deploy,
+  // where the verified bearer token is the authoritative identity instead).
+  const user = getUser()
+  if (user?.name) headers.set('X-FMD-Actor', user.name)
   return fetch(url, { ...opts, headers })
 }
 

@@ -11,13 +11,22 @@ import { guard, loadPermissions, isAllowed } from './permissions.js'
 // "Preview as" role, else an anonymous fallback.
 export function actorOf(req) {
   const u = req.user || {}
+  // A server-verified identity (a valid OIDC token) is authoritative.
   if (u.name) return u.name
   if (u.username) return u.username
   if (u.sub) return u.sub
+  // No verified identity. In OPEN DEV MODE (no OIDC) the caller is the author in
+  // their own editor, so trust the name the client decoded from its sign-in token
+  // (X-FMD-Actor). NEVER trust it in a secured deployment — there the verified
+  // token above is the only identity, and an unauthenticated caller stays unknown.
+  if (!process.env.OIDC_ISSUER) {
+    const hdr = req.headers['x-fmd-actor']
+    if (hdr && String(hdr).trim()) return String(hdr).trim().slice(0, 120)
+  }
   const preview = req.headers['x-fmd-roles']
   if (preview !== undefined) {
     const role = String(preview).split(',')[0].trim()
-    return role ? `Preview (${role})` : 'Someone'
+    if (role) return `${role} (preview)`
   }
   return 'Someone'
 }
