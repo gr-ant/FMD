@@ -677,6 +677,13 @@ table td.muted-cell { padding: 22px 10px; opacity: .8; text-align: center; }
   padding: 12px 14px;
   margin-bottom: 10px;
 }
+/* natural-language guide: page index + per-page task lists */
+.wiki-page-index { color: var(--muted); margin: 0 0 14px; line-height: 1.6; }
+.wiki-task-list { list-style: none; margin: 6px 0 0; padding: 0; }
+.wiki-task { position: relative; padding: 3px 0 3px 18px; line-height: 1.55; }
+.wiki-task::before { content: '›'; position: absolute; left: 2px; color: var(--accent); }
+.wiki-ui-name { color: var(--text); font-weight: 600; }
+.wiki-perm-detail-label { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 16px 0 6px; }
 .wiki-entity-head {
   display: flex;
   align-items: center;

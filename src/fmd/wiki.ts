@@ -4,7 +4,7 @@
 // semantics or runtime data.
 // -----------------------------------------------------------------------
 
-import type { Node, RootNode, BlockNode, ActionStep } from './types'
+import type { Node, RootNode, BlockNode, ActionStep, VizNode, ItemNode, FilterNode } from './types'
 import type { Schema } from './types'
 import { collectForms, collectActions, collectTriggers, collectRoles } from './parse/schema'
 import { fieldName } from '../parser'
@@ -129,6 +129,8 @@ export interface AppWiki {
   triggers: WikiTrigger[]
   roles: string[]
   permMatrix: WikiPermEntry[]
+  // Plain-English "who can do what" — one sentence per role. **bold** marks a role.
+  permSummary: string[]
   topGaps: string[]  // top-level documentation gaps (no pages, no data, etc.)
 }
 
@@ -266,7 +268,11 @@ function buildPageGuide(
     }
   }
 
-  const describeViz = (n: import('./types').VizNode): void => {
+  // Labels of the [Count]/[Slide] KPI items nested in a counter/slider.
+  const itemLabels = (n: VizNode): string[] =>
+    n.children.filter((c): c is ItemNode => c.type === 'Item').flatMap((c) => c.items.map((it) => it.label)).filter(Boolean)
+
+  const describeViz = (n: VizNode): void => {
     const src = sourceName(schema, n.source)
     const cols = specCols(n.spec)
     if (n.viz === 'table') {
@@ -277,21 +283,34 @@ function buildPageGuide(
       if (n.crud.includes('d')) ops.push('remove a row with its ✕ button')
       if (ops.length) s += ` You can ${oxford(ops)}.`
       tasks.push(s)
+      // Viewer controls: [Search] box and [Filter] dropdowns.
+      const hasSearch = n.children.some((c) => c.type === 'Search')
+      const filterFields = n.children.filter((c): c is FilterNode => c.type === 'Filter').map((c) => humanise(c.field))
+      const ctrl: string[] = []
+      if (hasSearch) ctrl.push('search it')
+      if (filterFields.length) ctrl.push(`filter it by ${oxford(filterFields)}`)
+      if (ctrl.length) tasks.push(`You can ${oxford(ctrl)}.`)
     } else if (n.viz === 'board') {
       tasks.push(`${src} are shown on a board grouped by **${cols[0] || 'status'}** — each column is a stage and shows how many items it holds.`)
     } else if (n.viz === 'calendar') {
       tasks.push(`${src} appear on a month calendar, placed by their **${cols[0] || 'date'}** date.`)
     } else if (n.viz === 'counter') {
-      tasks.push(`The **${src}** summary shows key totals at the top of the page.`)
+      const labels = itemLabels(n)
+      tasks.push(labels.length
+        ? `The **${src}** summary shows ${oxford(labels)}.`
+        : `The **${src}** summary shows key totals at the top of the page.`)
     } else if (n.viz === 'checklist') {
       tasks.push(`${src} are shown as a checklist — tick an item to mark it done.`)
     } else if (n.viz === 'chart') {
       tasks.push(`A chart summarises ${src}${cols.length ? ` by ${cols[0]}` : ''}.`)
     } else if (n.viz === 'slider') {
-      tasks.push(`${src} are shown as progress bars.`)
+      const labels = itemLabels(n)
+      tasks.push(labels.length
+        ? `Progress bars track ${oxford(labels)} for ${src}.`
+        : `${src} are shown as progress bars.`)
     }
     for (const c of n.children) {
-      if (c.type === 'RowButton') tasks.push(`Each ${singular(src.toLowerCase())} row has a **${c.label}** button.`)
+      if (c.type === 'RowButton') tasks.push(`Each ${singular(src.toLowerCase())} row has a **${c.label}** button that runs an action just for that row.`)
     }
   }
 
@@ -318,6 +337,26 @@ function buildPageGuide(
           tasks.push(`Ask the assistant about ${oxford((c.sources || []).map((s) => sourceName(schema, s)))} — it can look things up for you but never changes your data.`)
           break
         case 'Button': describeButton(c.label, c.target); break
+        case 'UserManagement':
+          tasks.push('Manage people and their access here — invite users and set what each role can do.')
+          break
+        case 'Menu':
+          if (c.items && c.items.length) {
+            tasks.push(`Use the ${c.side ? 'side menu' : 'top menu'} to move between pages: ${c.items.join(', ')}.`)
+          }
+          break
+        case 'Text':
+          if (c.value && c.value.trim()) tasks.push(`The page shows a note: “${c.value.trim()}”.`)
+          break
+        case 'Widget':
+          // A named card grouping content — name it, then describe what's inside.
+          if (c.children.length) {
+            tasks.push(`The **${c.name}** card groups:`)
+            recurse(c)
+          } else {
+            tasks.push(`The **${c.name}** card.`)
+          }
+          break
         default: recurse(c)
       }
     }
@@ -470,6 +509,44 @@ function buildTriggers(root: RootNode): WikiTrigger[] {
   }))
 }
 
+// Verbs in plain English: full set -> "fully manage"; otherwise "view/add/edit/delete".
+function humanVerbs(verbs: string[]): string {
+  const has = (v: string) => verbs.includes(v)
+  if (has('read') && has('create') && has('update') && has('delete')) return 'fully manage'
+  const map: Record<string, string> = { read: 'view', create: 'add', update: 'edit', delete: 'delete' }
+  const words = ['read', 'create', 'update', 'delete'].filter(has).map((v) => map[v])
+  return words.length ? oxford(words) : 'see'
+}
+
+// A plain-English "who can do what" — one sentence per declared role. Falls back
+// to a single line when no per-entity grants are configured (the app is open).
+function buildPermSummary(schema: Schema, roles: string[]): string[] {
+  const withPerms = Object.values(schema).filter((e) => e.permissions && Object.keys(e.permissions).length > 0)
+  if (!withPerms.length) {
+    return ['No role restrictions are configured — anyone who can open the app can view and edit all data.']
+  }
+  const out: string[] = []
+  for (const role of roles) {
+    const rl = role.toLowerCase()
+    // Group entities that share the same verb phrase, so "fully manage Orders and
+    // fully manage Customers" collapses to "fully manage Orders and Customers".
+    const byPhrase = new Map<string, string[]>()
+    for (const e of withPerms) {
+      const g = e.permissions![rl]
+      if (g && g.verbs.length) {
+        const ph = humanVerbs(g.verbs)
+        if (!byPhrase.has(ph)) byPhrase.set(ph, [])
+        byPhrase.get(ph)!.push(humanise(e.name))
+      }
+    }
+    const parts = [...byPhrase.entries()].map(([ph, ents]) => `${ph} ${oxford(ents)}`)
+    out.push(parts.length
+      ? `**${role}** can ${oxford(parts)}.`
+      : `**${role}** has no special access — they see only what’s open to everyone.`)
+  }
+  return out
+}
+
 function buildPermMatrix(schema: Schema, roles: string[]): WikiPermEntry[] {
   return Object.entries(schema)
     .filter(([, e]) => e.permissions && Object.keys(e.permissions).length > 0)
@@ -501,13 +578,14 @@ export function generateWiki(root: RootNode, schema: Schema): AppWiki {
   const actions = buildActions(root)
   const triggers = buildTriggers(root)
   const permMatrix = buildPermMatrix(schema, roles)
+  const permSummary = buildPermSummary(schema, roles)
 
   const topGaps: string[] = []
   if (!appName) topGaps.push('No [App Name] declared — add one so the wiki has a title.')
   if (!pages.length) topGaps.push('No [Display] pages found — add at least one to give the app a UI.')
   if (!Object.keys(schema).length) topGaps.push('No [Data] entities found — add a [Data] block to define the data model.')
 
-  return { appName, pages, entities, forms, actions, triggers, roles, permMatrix, topGaps }
+  return { appName, pages, entities, forms, actions, triggers, roles, permMatrix, permSummary, topGaps }
 }
 
 // ---- Plain-text export (for offline testing) ----------------------------
@@ -603,16 +681,14 @@ export function wikiToMarkdown(wiki: AppWiki): string {
     }
   }
 
-  // Permissions
-  if (wiki.permMatrix.length) {
-    h2('Permissions')
-    for (const row of wiki.permMatrix) {
-      h3(row.entityName)
-      for (const g of row.grants) {
-        li(`${g.role}: ${g.verbs.join(', ')}`)
-      }
-      lines.push('')
-    }
+  // Permissions — plain-English "who can do what", then the per-entity detail.
+  h2('Who can do what')
+  wiki.permSummary.forEach((s) => li(s.replace(/\*\*/g, '')))
+  lines.push('')
+  for (const row of wiki.permMatrix) {
+    h3(row.entityName)
+    for (const g of row.grants) li(`${g.role}: ${g.verbs.join(', ')}`)
+    lines.push('')
   }
 
   return lines.join('\n')

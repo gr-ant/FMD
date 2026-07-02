@@ -86,6 +86,16 @@ function PagesSection({ wiki }: { wiki: AppWiki }) {
     <section className="wiki-section">
       <h2 className="wiki-h2">Using the app</h2>
       {wiki.pages.length === 0 && <p className="wiki-empty-note">No [Display] pages declared yet.</p>}
+      {wiki.pages.length > 0 && (
+        <p className="wiki-page-index">
+          This app has {wiki.pages.length} {wiki.pages.length === 1 ? 'page' : 'pages'}:{' '}
+          {wiki.pages.map((pg, i) => (
+            <React.Fragment key={pg.name}>
+              {i > 0 && ', '}<strong className="wiki-ui-name">{pg.name}</strong>
+            </React.Fragment>
+          ))}. Here's how to use each:
+        </p>
+      )}
       {wiki.pages.map((pg) => (
         <div key={pg.name} className="wiki-page-block">
           <h3 className="wiki-h3">{pg.name}</h3>
@@ -231,7 +241,7 @@ function AutomationsSection({ wiki }: { wiki: AppWiki }) {
 }
 
 function PermissionsSection({ wiki }: { wiki: AppWiki }) {
-  if (!wiki.permMatrix.length && !wiki.roles.length) return null
+  if (!wiki.permSummary.length && !wiki.roles.length) return null
   return (
     <section className="wiki-section">
       <h2 className="wiki-h2">Permissions</h2>
@@ -240,7 +250,12 @@ function PermissionsSection({ wiki }: { wiki: AppWiki }) {
           Declared roles: {wiki.roles.map((r) => <span key={r} className="wiki-role-chip">{r}</span>)}
         </p>
       )}
-      {wiki.permMatrix.length === 0 && <p className="wiki-empty-note">No per-entity permission grants declared.</p>}
+      {wiki.permSummary.length > 0 && (
+        <ul className="wiki-task-list">
+          {wiki.permSummary.map((s, i) => <li key={i} className="wiki-task">{prose(s)}</li>)}
+        </ul>
+      )}
+      {wiki.permMatrix.length > 0 && <p className="wiki-perm-detail-label">Details</p>}
       {wiki.permMatrix.length > 0 && (
         <table className="wiki-table">
           <thead>
