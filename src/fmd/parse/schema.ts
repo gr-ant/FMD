@@ -10,6 +10,7 @@ import type {
   CalcNode,
   RollupNode,
   LookupNode,
+  AutoNode,
   ActionStep,
   PostStepNode,
   TriggerNode,
@@ -417,6 +418,16 @@ function bindLookup(entity: Entity, l: LookupNode): void {
   if (!target) { target = { name: l.field, type: 'text' }; entity.fields.push(target) }
   target.lookup = { via: l.via, target: l.target }
 }
+// An [Auto] directive marks a (usually text) field as server-auto-numbered: the
+// field is filled on create from a sequence, formatted by `pattern`. Declare the
+// field if it isn't already present (defaults to text — the formatted id is a
+// string). The counter itself lives server-side, keyed per source+field.
+function bindAuto(entity: Entity, a: AutoNode): void {
+  if (!a.field) return
+  let target = entity.fields.find((f) => f.name.toLowerCase() === String(a.field).toLowerCase())
+  if (!target) { target = { name: a.field, type: 'text' }; entity.fields.push(target) }
+  target.auto = a.pattern
+}
 
 export function collectSchema(root: RootNode): Schema {
   const schema: Schema = {}
@@ -438,6 +449,7 @@ export function collectSchema(root: RootNode): Schema {
           if (sub.type === 'Calc') bindCalc(current, sub)
           if (sub.type === 'Rollup') bindRollup(current, sub)
           if (sub.type === 'Lookup') bindLookup(current, sub)
+          if (sub.type === 'Auto') bindAuto(current, sub)
           if (sub.type === 'Permission') bindPermissions(current, sub)
         }
       } else if (child.type === 'Options' && current) {
@@ -449,6 +461,8 @@ export function collectSchema(root: RootNode): Schema {
         bindRollup(current, child)
       } else if (child.type === 'Lookup' && current) {
         bindLookup(current, child)
+      } else if (child.type === 'Auto' && current) {
+        bindAuto(current, child)
       } else if (child.type === 'Permission' && current) {
         bindPermissions(current, child)
       }
@@ -468,4 +482,20 @@ export function collectSchema(root: RootNode): Schema {
     }
   }
   return schema
+}
+
+// The auto-number model for server-side generation, mirroring how permissions
+// are derived from the collected schema. Shape: { [source]: { [field]: pattern } }.
+// The server (server/autonumber.js) reads this from `_fmd_configs.autonumbers` and
+// fills any empty auto field on create with the next sequential formatted value.
+export function collectAutoNumbers(schema: Schema): Record<string, Record<string, string>> {
+  const out: Record<string, Record<string, string>> = {}
+  for (const [src, def] of Object.entries(schema)) {
+    for (const f of def.fields) {
+      if (f.auto != null && f.auto !== '') {
+        ;(out[src] ||= {})[f.name] = f.auto
+      }
+    }
+  }
+  return out
 }

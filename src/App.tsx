@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { parseFMD, collectSchema, collectForms, collectRules, collectActions, collectTriggers, collectStyle, collectRoles, isDataBlock, lintReferences, collectWarnings } from './parser'
+import { parseFMD, collectSchema, collectForms, collectRules, collectActions, collectTriggers, collectStyle, collectRoles, collectAutoNumbers, isDataBlock, lintReferences, collectWarnings } from './parser'
 import type { Warning } from './parser'
 import Renderer from './Renderer'
 import { FormModal, CasePage } from './Widget'
@@ -346,6 +346,9 @@ export default function App() {
         for (const [roleLc, p] of Object.entries(def.permissions)) permissions[src][roleLc] = p.verbs
       }
     }
+    // Auto-number model for server-side generation: { source: { field: pattern } }.
+    // The server fills any empty [Auto] field on create with the next sequential id.
+    const autonumbers = collectAutoNumbers(schema)
     // If the app was renamed, fully rewrite the DB so no data from the
     // previous config (e.g. a same-named entity) survives.
     const prevName = await getConfig('appName').catch((): string | null => null)
@@ -394,7 +397,7 @@ export default function App() {
       const r = await fetch('/api/_apply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entities, reset, permissions, triggers, rules }),
+        body: JSON.stringify({ entities, reset, permissions, triggers, rules, autonumbers }),
       })
       const data = await r.json()
       if (!r.ok || !data.ok) throw new Error(data.error || `HTTP ${r.status}`)

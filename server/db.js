@@ -59,7 +59,7 @@ export async function listColumns(table) {
 export const cleanVal = (v) => (v === '' ? null : v)
 
 // Source names FMD uses for its own tables; a [List]/[Store] can't reuse them.
-export const RESERVED_SOURCES = new Set(['_fmd_documents', '_fmd_configs', '_fmd_files', '_fmd_audit'])
+export const RESERVED_SOURCES = new Set(['_fmd_documents', '_fmd_configs', '_fmd_files', '_fmd_audit', '_fmd_seq'])
 // The reserved names a model tries to use (lowercased, de-duped), if any. Any
 // `_`-prefixed name is reserved for FMD internals; `documents`/`configs` are now
 // ordinary, usable entity names.
@@ -194,6 +194,19 @@ export async function init() {
   await pool.query(`CREATE INDEX IF NOT EXISTS _fmd_audit_source_idx ON _fmd_audit (source, ts DESC)`)
   await pool.query(`CREATE INDEX IF NOT EXISTS _fmd_audit_record_idx ON _fmd_audit (record_id)`)
 
+  // Auto-number counters ([Auto] fields). One row per source+field holds the
+  // last-issued value; the server bumps it atomically on create (see
+  // server/autonumber.js). Keyed per source+field so each auto field counts
+  // independently. A plain counter table (not a Postgres SEQUENCE) so it lives in
+  // whatever schema owns the data — the public editor DB and each deployed app.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS _fmd_seq (
+      source TEXT NOT NULL,
+      field TEXT NOT NULL,
+      counter BIGINT NOT NULL DEFAULT 0,
+      PRIMARY KEY (source, field)
+    )`)
+
   // Rebuild the routing map from what is PHYSICALLY in the database, so entities
   // applied in a previous session (via /api/_apply) keep routing across API
   // restarts -- the seed alone no longer knows about them. Stores are registered
@@ -204,7 +217,7 @@ export async function init() {
   const { rows: tableRows } = await pool.query(
     `SELECT table_name FROM information_schema.tables
      WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
-       AND table_name NOT IN ('_fmd_configs', '_fmd_documents', '_fmd_files', '_fmd_audit')`)
+       AND table_name NOT IN ('_fmd_configs', '_fmd_documents', '_fmd_files', '_fmd_audit', '_fmd_seq')`)
   for (const r of tableRows) KIND[r.table_name] = 'list'
 
   // [API] external sources have no table -- they live in _fmd_configs as `api:<source>`.

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { listSavedConfigs, saveConfigAs, deleteSavedConfig, type SavedConfig } from '../../state/configStore'
 import type { FmdFile } from '../../state/files'
-import { parseFMD, collectSchema, collectWarnings, collectTriggers, collectRules } from '../../parser'
+import { parseFMD, collectSchema, collectWarnings, collectTriggers, collectRules, collectAutoNumbers } from '../../parser'
 import { useDialogs } from '../dialogs'
 
 // Build the /api/_deploy entities payload from a config's document — same shape
@@ -86,6 +86,7 @@ export default function ConfigsMenu({
           entities: entitiesFromDoc(it.doc),
           permissions: permissionsFromDoc(it.doc),
           triggers: collectTriggers(deployTree), rules: collectRules(deployTree),
+          autonumbers: collectAutoNumbers(collectSchema(deployTree)),
         }),
       })
       const data = await r.json()

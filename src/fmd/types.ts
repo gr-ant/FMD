@@ -47,6 +47,12 @@ export interface Field {
   calc?: string
   rollup?: string
   lookup?: { via: string; target: string | null }
+  // Server-generated auto-number pattern (from an `[Auto] Field = "WO-####"`
+  // directive under the entity). On create, if the field is empty the server
+  // fills it with the next sequential value formatted by this pattern. `####` is
+  // a zero-padded counter; a `{year}` token expands to the current year; all
+  // other characters are a literal prefix/suffix.
+  auto?: string
 }
 
 // An entity declared in [Data]. `kind` drives storage: list -> SQL table,
@@ -334,6 +340,17 @@ export interface LookupNode extends BaseNode {
   target: string | null
 }
 
+// A server-generated auto-number directive under an entity:
+//   [Auto] OrderNo = "WO-####"
+// The field is filled on create (when left empty) with the next sequential
+// value formatted by `pattern`. `####` is a zero-padded counter run; a `{year}`
+// token expands to the current year; other characters are a literal prefix/suffix.
+export interface AutoNode extends BaseNode {
+  type: 'Auto'
+  field: string
+  pattern: string
+}
+
 // An option-set definition configuring a drop/link field.
 export interface OptionsNode extends BaseNode {
   type: 'Options'
@@ -506,6 +523,7 @@ export type Node =
   | CalcNode
   | RollupNode
   | LookupNode
+  | AutoNode
   | OptionsNode
   | ActionNode
   | StepNode
