@@ -1,7 +1,7 @@
 // WikiPanel — renders the generated AppWiki as styled HTML in the configurator.
 // Appears as a collapsible overlay (same pattern as DataInspector).
 import React, { useState } from 'react'
-import type { AppWiki, WikiFieldRow, WikiFormField, WikiStep } from '../../fmd/wiki'
+import type { AppWiki, WikiFieldRow, WikiFormField } from '../../fmd/wiki'
 
 // ---- small helpers -------------------------------------------------------
 
@@ -173,29 +173,6 @@ function FormsSection({ wiki }: { wiki: AppWiki }) {
   )
 }
 
-function StepList({ steps }: { steps: WikiStep[] }) {
-  if (!steps.length) return <p className="wiki-empty-note">No steps declared.</p>
-  return (
-    <ol className="wiki-step-list">
-      {steps.map((s, i) => {
-        const assigns = s.assigns.map((a) => `${a.field} = ${a.expr}`).join(', ')
-        // An outbound [Post]/[Call] step targets a named connection + path; a
-        // record-write step targets a source with an optional `where` filter.
-        const target = s.connection
-          ? <> → <code>@{s.connection}{s.path}</code></>
-          : <>{s.source ? <> on <code>{s.source}</code></> : null}{s.filter ? <> where <em>{s.filter}</em></> : null}</>
-        return (
-          <li key={i} className="wiki-step">
-            <span className={`wiki-op wiki-op-${s.op}`}>{s.op.toUpperCase()}</span>
-            {target}
-            {assigns && <span className="wiki-assigns">: {assigns}</span>}
-          </li>
-        )
-      })}
-    </ol>
-  )
-}
-
 function AutomationsSection({ wiki }: { wiki: AppWiki }) {
   if (!wiki.actions.length && !wiki.triggers.length) return null
   return (
@@ -204,7 +181,7 @@ function AutomationsSection({ wiki }: { wiki: AppWiki }) {
 
       {wiki.actions.length > 0 && (
         <>
-          <h3 className="wiki-h3 wiki-h3-sub">Actions</h3>
+          <h3 className="wiki-h3 wiki-h3-sub">Buttons &amp; actions</h3>
           {wiki.actions.map((a) => (
             <div key={a.name} className="wiki-action-block">
               <div className="wiki-action-head">
@@ -212,7 +189,9 @@ function AutomationsSection({ wiki }: { wiki: AppWiki }) {
                 <strong>{a.name}</strong>
               </div>
               {a.gaps.map((g, i) => <Gap key={i} msg={g} />)}
-              <StepList steps={a.steps} />
+              <p className="wiki-narrative">
+                When you run <strong className="wiki-ui-name">{a.name}</strong>, the app {a.narrative}.
+              </p>
             </div>
           ))}
         </>
@@ -220,18 +199,14 @@ function AutomationsSection({ wiki }: { wiki: AppWiki }) {
 
       {wiki.triggers.length > 0 && (
         <>
-          <h3 className="wiki-h3 wiki-h3-sub">Triggers</h3>
+          <h3 className="wiki-h3 wiki-h3-sub">Automatic triggers</h3>
           {wiki.triggers.map((t, i) => (
             <div key={i} className="wiki-action-block">
               <div className="wiki-action-head">
                 <span className="wiki-badge wiki-badge-trigger">Trigger</span>
                 <strong>{t.label}</strong>
-                <span className="wiki-trigger-src">
-                  scans <code>{t.source}</code>
-                  {t.condition && <> where <em>{t.condition}</em></>}
-                </span>
               </div>
-              <StepList steps={t.steps} />
+              <p className="wiki-narrative">{t.narrative}</p>
             </div>
           ))}
         </>

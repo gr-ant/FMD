@@ -43,5 +43,8 @@ export function resolveField(fields: Field[] | null, rows: FmdRecord[] | null, r
     (rowKeys && rowKeys.find((k) => k.toLowerCase() === name.toLowerCase())) ||
     (declared && declared.find((k) => k.toLowerCase() === name.toLowerCase())) ||
     name
-  return { name, key, ok }
+  // Prefer a declared "quoted" display label for the shown NAME (data stays keyed
+  // by `key`), so `txtTicketNo "Ticket #"` renders "Ticket #" as the header.
+  const decl = fields?.find((f) => f.name.toLowerCase() === name.toLowerCase())
+  return { name: (decl && decl.label) || name, key, ok }
 }

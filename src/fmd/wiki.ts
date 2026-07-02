@@ -105,6 +105,7 @@ function toWikiStep(s: ActionStep): WikiStep {
 export interface WikiAction {
   name: string
   steps: WikiStep[]
+  narrative: string   // plain-English "what happens" when the action runs
   gaps: string[]
 }
 
@@ -113,6 +114,7 @@ export interface WikiTrigger {
   source: string
   condition: string | null
   steps: WikiStep[]
+  narrative: string   // plain-English "when X happens, the app …"
 }
 
 export interface WikiPermEntry {
@@ -232,6 +234,43 @@ function specCols(schema: Schema, source: string | null, spec: string): string[]
   return String(spec || '').split(',').map((s) => s.trim()).filter(Boolean).map((ref) => fieldLabelOf(schema, source, ref))
 }
 
+// ---- declarative action/trigger narrative ("what happens", in plain English) ----
+
+/** A value expression in reader-friendly form: unquote literals, `this.X` -> "the X". */
+function cleanValue(expr: string): string {
+  return String(expr || '').trim()
+    .replace(/^["']|["']$/g, '')
+    .replace(/\bthis\.([A-Za-z0-9_]+)/g, (_m, f) => `the ${humanise(f)}`)
+    .replace(/\bthis\b/g, 'this record')
+}
+/** A step's assignments as "Label = value, Label = value" using declared labels. */
+function assignsText(schema: Schema, source: string | null, assigns: { field: string; expr: string }[]): string {
+  return oxford(assigns.map((a) => `${fieldLabelOf(schema, source, a.field)} = ${cleanValue(a.expr)}`))
+}
+/** One step as a plain-English clause revealing the table it changes and how. */
+function stepClause(schema: Schema, s: WikiStep): string {
+  const one = singular(sourceName(schema, s.source)).toLowerCase()
+  const detail = s.assigns.length ? ` (${assignsText(schema, s.source, s.assigns)})` : ''
+  if (s.op === 'create') return `creates a ${one}${detail}`
+  if (s.op === 'update') return `updates the ${one}${detail}`
+  if (s.op === 'delete') return `removes the matching ${one}`
+  if (s.op === 'post') return `sends a message via ${s.connection || 'the connection'}${detail}`
+  return `changes the ${one}`
+}
+/** The whole action as a sequential journey: "updates X …, then creates Y …". */
+function actionNarrative(schema: Schema, steps: WikiStep[]): string {
+  return steps.length ? oxford(steps.map((s) => stepClause(schema, s)), 'then') : 'has no steps yet'
+}
+/** A `? condition` as a clause: `Status == "Done"` -> "Status is Done". */
+function conditionText(cond: string | null): string {
+  if (!cond) return ''
+  return String(cond)
+    .replace(/==/g, ' is ').replace(/!=/g, ' is not ')
+    .replace(/>=/g, ' is at least ').replace(/<=/g, ' is at most ')
+    .replace(/>/g, ' is over ').replace(/</g, ' is under ')
+    .replace(/["']/g, '').replace(/\s+/g, ' ').trim()
+}
+
 // Turn a single page's elements into task-oriented, end-user instructions.
 // Deterministic prose from the config's own labels — no generated filler.
 function buildPageGuide(
@@ -256,21 +295,11 @@ function buildPageGuide(
       || null
   }
 
-  // One step of an action, in plain English (used to reveal what a button does —
-  // especially when it writes to several tables at once).
-  const stepPhrase = (s: WikiStep): string => {
-    const src = sourceName(schema, s.source)
-    if (s.op === 'create') return `adds a ${singular(src)}`
-    if (s.op === 'update') return `updates ${src}`
-    if (s.op === 'delete') return `removes a ${singular(src)}`
-    if (s.op === 'post') return `sends a message via ${s.connection}`
-    return `changes ${src}`
-  }
-  // A one-line summary of what an action does across every table it touches.
+  // The action's declarative journey ("updates the ticket …, then creates a
+  // payment …, then updates the customer …") — reveals every table it changes.
   const actionSummary = (target: string | null): string | null => {
     const a = actionByName.get(String(target || '').toLowerCase())
-    if (!a || !a.steps.length) return null
-    return oxford(a.steps.map(stepPhrase))
+    return a && a.steps.length ? a.narrative : null
   }
 
   // Describe a button. `prefix` frames it (e.g. "On the ticket's page,"); empty
@@ -530,7 +559,7 @@ function buildForms(root: RootNode): WikiForm[] {
   })
 }
 
-function buildActions(root: RootNode): WikiAction[] {
+function buildActions(root: RootNode, schema: Schema): WikiAction[] {
   const collected = collectActions(root)
   return Object.values(collected).map((a) => {
     const gaps: string[] = []
@@ -539,18 +568,24 @@ function buildActions(root: RootNode): WikiAction[] {
 
     const steps: WikiStep[] = a.steps.map(toWikiStep)
 
-    return { name: a.name, steps, gaps }
+    return { name: a.name, steps, narrative: actionNarrative(schema, steps), gaps }
   })
 }
 
-function buildTriggers(root: RootNode): WikiTrigger[] {
+function buildTriggers(root: RootNode, schema: Schema): WikiTrigger[] {
   const collected = collectTriggers(root)
-  return collected.map((t) => ({
-    label: t.label || '(no label)',
-    source: t.source,
-    condition: t.condition,
-    steps: t.steps.map(toWikiStep),
-  }))
+  return collected.map((t) => {
+    const steps = t.steps.map(toWikiStep)
+    const src = singular(sourceName(schema, t.source)).toLowerCase()
+    const when = t.condition ? `'s ${conditionText(t.condition)}` : ' changes'
+    return {
+      label: t.label || '(no label)',
+      source: t.source,
+      condition: t.condition,
+      steps,
+      narrative: `When a ${src}${when}, the app ${actionNarrative(schema, steps)}.`,
+    }
+  })
 }
 
 // Verbs in plain English: full set -> "fully manage"; otherwise "view/add/edit/delete".
@@ -618,9 +653,9 @@ export function generateWiki(root: RootNode, schema: Schema): AppWiki {
   const roles = collectRoles(root)
   const entities = buildEntities(schema)
   const forms = buildForms(root)
-  const actions = buildActions(root)
+  const actions = buildActions(root, schema)
   const pages = buildPages(root, schema, forms, actions)
-  const triggers = buildTriggers(root)
+  const triggers = buildTriggers(root, schema)
   const permMatrix = buildPermMatrix(schema, roles)
   const permSummary = buildPermSummary(schema, roles)
 
@@ -700,29 +735,17 @@ export function wikiToMarkdown(wiki: AppWiki): string {
     lines.push('')
   }
 
-  // Automations
+  // Automations — declarative "what happens", not a step table.
   if (wiki.actions.length || wiki.triggers.length) {
     h2('Automations')
     for (const a of wiki.actions) {
-      h3(`Action: ${a.name}`)
+      h3(a.name)
       a.gaps.forEach(gap)
-      for (const s of a.steps) {
-        const src = s.source ? ` on ${s.source}` : ''
-        const cond = s.filter ? ` where ${s.filter}` : ''
-        const assigns = s.assigns.map((x) => `${x.field} = ${x.expr}`).join(', ')
-        li(`${s.op.toUpperCase()}${src}${cond}${assigns ? `: ${assigns}` : ''}`)
-      }
-      lines.push('')
+      p(`When you run ${a.name}, the app ${a.narrative}.`)
     }
     for (const t of wiki.triggers) {
-      h3(`Trigger: ${t.label}`)
-      li(`Scans: ${t.source}${t.condition ? ` where ${t.condition}` : ''}`)
-      for (const s of t.steps) {
-        const src = s.source ? ` on ${s.source}` : ''
-        const assigns = s.assigns.map((x) => `${x.field} = ${x.expr}`).join(', ')
-        li(`${s.op.toUpperCase()}${src}${assigns ? `: ${assigns}` : ''}`)
-      }
-      lines.push('')
+      h3(t.label)
+      p(t.narrative)
     }
   }
 
