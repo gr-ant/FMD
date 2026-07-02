@@ -206,6 +206,16 @@ export interface RowButtonNode extends BaseNode {
   target: string | null
 }
 
+// A bulk action button inside a [Table]: [BulkAction -> Action] Label
+// (alias [BulkButton]). Same label/target shape as [Button]/[RowButton], but the
+// renderer draws it in a toolbar that appears once ≥1 row is checkbox-selected,
+// running THAT [Action] once per selected record (each bound as `this`).
+export interface BulkActionNode extends BaseNode {
+  type: 'BulkAction'
+  label: string
+  target: string | null
+}
+
 // A form (modal) that creates a record in its source.
 export interface FormNode extends BaseNode {
   type: 'Form'
@@ -472,6 +482,7 @@ export type Node =
   | ItemNode
   | ButtonNode
   | RowButtonNode
+  | BulkActionNode
   | FormNode
   | FormFieldNode
   | LineItemsNode

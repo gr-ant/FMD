@@ -1,8 +1,8 @@
-import type { Node, FormNode, ButtonNode, RowButtonNode, ActionNode, MenuNode } from '../../fmd/types'
+import type { Node, FormNode, ButtonNode, RowButtonNode, BulkActionNode, ActionNode, MenuNode } from '../../fmd/types'
 
-// [Button] and [RowButton] share the same label/target shape, so button matchers
-// accept either.
-type ClickNode = ButtonNode | RowButtonNode
+// [Button], [RowButton] and [BulkAction] share the same label/target shape, so
+// button matchers accept any of them.
+type ClickNode = ButtonNode | RowButtonNode | BulkActionNode
 
 // Match a clicked [Button] to a [Form] by its label, then its -> target.
 export function matchForm(forms: FormNode[], btn: ClickNode | null): FormNode | null {

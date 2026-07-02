@@ -363,6 +363,14 @@ function parseNodeInner(line: string): Node {
     if (first === 'rowbutton' || first === 'rowaction') {
       return { type: 'RowButton', label: content, target: innerSource ? innerSource.toLowerCase() : null, children: [] }
     }
+    // A bulk action button inside a [Table]: [BulkAction -> Action] Label (alias
+    // [BulkButton]). Same label/target shape as [RowButton] — `-> Target` names an
+    // [Action], the trailing text is the label — but the renderer shows it in a
+    // toolbar that appears once rows are checkbox-selected and runs the [Action]
+    // once per selected record (each bound as `this`).
+    if (first === 'bulkaction' || first === 'bulkbutton') {
+      return { type: 'BulkAction', label: content, target: innerSource ? innerSource.toLowerCase() : null, children: [] }
+    }
     // A button that opens the user-management window: [User Management] Label.
     if (lowerInner === 'user management' || lowerInner === 'usermanagement') {
       return { type: 'UserManagement', label: content || 'User Management', children: [] }
