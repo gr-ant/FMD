@@ -850,6 +850,38 @@ table td.muted-cell { padding: 22px 10px; opacity: .8; text-align: center; }
   vertical-align: top;
 }
 .wiki-table tr:last-child td { border-bottom: 0; }
+/* ---- Integrations (outbound connections) library ---- */
+.conn-modal { width: min(880px, 94vw); max-height: 90vh; display: flex; flex-direction: column; }
+.conn-intro { color: var(--muted); font-size: 13px; margin: 0 0 14px; line-height: 1.5; }
+.conn-intro code { background: #7c5cff1a; color: var(--accent); padding: 1px 6px; border-radius: 6px; font-size: 12px; }
+.conn-body { display: grid; grid-template-columns: 1fr 340px; gap: 16px; flex: 1 1 auto; min-height: 0; overflow: auto; }
+@media (max-width: 720px) { .conn-body { grid-template-columns: 1fr; } }
+.conn-list { display: flex; flex-direction: column; gap: 8px; }
+.conn-empty { color: var(--muted); font-size: 13px; padding: 18px; text-align: center; border: 1px dashed var(--line); border-radius: 10px; }
+.conn-row { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.conn-row-main { display: flex; align-items: center; gap: 8px; }
+.conn-name { font-weight: 600; }
+.conn-url { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.conn-badge { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; padding: 2px 7px; border-radius: 999px; background: #7c5cff1a; color: var(--accent); border: 1px solid var(--line); }
+.conn-badge.conn-slack { color: #4ad; }
+.conn-row-meta { display: flex; align-items: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+.conn-secret { font-size: 11px; color: var(--muted); }
+.conn-secret.set { color: var(--accent-2); }
+.conn-auth { font-size: 11px; color: var(--muted); flex: 1; }
+.conn-acts { display: flex; gap: 6px; }
+.conn-form { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.conn-form-head { font-weight: 700; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.conn-field { display: flex; flex-direction: column; gap: 5px; }
+.conn-field > span { font-size: 12px; color: var(--muted); }
+.conn-hint { font-size: 11px; color: var(--muted); font-style: italic; }
+.conn-note { font-size: 12px; color: var(--muted); line-height: 1.45; margin: 2px 0 0; }
+.conn-form-acts { display: flex; justify-content: flex-end; gap: 8px; align-items: center; }
+.conn-test { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 4px; display: flex; flex-direction: column; gap: 10px; }
+.conn-result { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--bg); }
+.conn-result.ok { border-color: var(--accent-2); }
+.conn-result.bad { border-color: #ff7a7a; }
+.conn-result-head { font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+.conn-result pre { margin: 0; font-size: 11px; max-height: 160px; overflow: auto; white-space: pre-wrap; word-break: break-word; color: var(--text); }
 
 /* ---- workspace ---- */
 .workspace { flex: 1; display: flex; min-height: 0; }

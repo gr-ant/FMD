@@ -202,12 +202,15 @@ function StepList({ steps }: { steps: WikiStep[] }) {
     <ol className="wiki-step-list">
       {steps.map((s, i) => {
         const assigns = s.assigns.map((a) => `${a.field} = ${a.expr}`).join(', ')
-        const src = s.source ? <> on <code>{s.source}</code></> : null
-        const cond = s.filter ? <> where <em>{s.filter}</em></> : null
+        // An outbound [Post]/[Call] step targets a named connection + path; a
+        // record-write step targets a source with an optional `where` filter.
+        const target = s.connection
+          ? <> → <code>@{s.connection}{s.path}</code></>
+          : <>{s.source ? <> on <code>{s.source}</code></> : null}{s.filter ? <> where <em>{s.filter}</em></> : null}</>
         return (
           <li key={i} className="wiki-step">
             <span className={`wiki-op wiki-op-${s.op}`}>{s.op.toUpperCase()}</span>
-            {src}{cond}
+            {target}
             {assigns && <span className="wiki-assigns">: {assigns}</span>}
           </li>
         )

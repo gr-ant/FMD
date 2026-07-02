@@ -9,6 +9,7 @@
 // client and server evaluate triggers identically.
 import { pool, q, qn, cleanVal } from './db.js'
 import { slugify } from './deploy.js'
+import { callConnection } from './connections.js'
 
 // ---------------------------------------------------------------------------
 // Pure engine (ported, dependency-free) -------------------------------------
@@ -201,7 +202,12 @@ async function runTrigger(schema, trigger, rules) {
   const matched = rows.filter((row) => passes(trigger.condition, row, rules))
   for (const row of matched) {
     for (const step of trigger.steps || []) {
-      if (step.op === 'create' && step.source) {
+      if (step.type === 'PostStep' || step.op === 'post') {
+        // Outbound integration: call the named connection with an interpolated
+        // body. Best-effort — a failed outbound call never aborts the sweep.
+        try { await callConnection(step.connection, { path: step.path, method: step.method || 'POST', body: buildBody(step.assigns, row) }) }
+        catch { /* skip */ }
+      } else if (step.op === 'create' && step.source) {
         await insertRow(schema, step.source, buildBody(step.assigns, row))
       } else if (step.source) {
         await runGlobalStep(schema, step, rules) // explicit-source update/delete

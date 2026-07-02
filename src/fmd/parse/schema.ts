@@ -10,7 +10,8 @@ import type {
   CalcNode,
   RollupNode,
   LookupNode,
-  StepNode,
+  ActionStep,
+  PostStepNode,
   TriggerNode,
   FormNode,
   FormFieldNode,
@@ -81,7 +82,27 @@ function bindPermissions(entity: Entity, permNode: PermissionNode): void {
 // One collected [Action]: its display name and ordered write steps.
 interface CollectedAction {
   name: string
-  steps: StepNode[]
+  steps: ActionStep[]
+}
+
+// A [Post]/[Call] step forms its request body from INDENTED `Field = expr` lines
+// (attached as child Text nodes after parsing) plus any inline assigns. Merge the
+// indented lines into `assigns` so the executor + server see a uniform step.
+function fillPostAssigns(step: PostStepNode): PostStepNode {
+  const fromChildren = step.children
+    .filter((c) => c.type === 'Text')
+    .map((c) => (c as { value: string }).value)
+    .map((v) => { const i = v.indexOf('='); return i === -1 ? null : { field: v.slice(0, i).trim(), expr: v.slice(i + 1).trim() } })
+    .filter((a): a is { field: string; expr: string } => !!a && !!a.field)
+  return fromChildren.length ? { ...step, assigns: [...step.assigns, ...fromChildren] } : step
+}
+
+// Collect the ordered steps under an [Action]/[Trigger]: record-writes ([Step])
+// and outbound calls ([PostStep], with its indented body merged in).
+function collectSteps(children: Node[]): ActionStep[] {
+  return children
+    .filter((c): c is ActionStep => c.type === 'Step' || c.type === 'PostStep')
+    .map((c) => (c.type === 'PostStep' ? fillPostAssigns(c) : c))
 }
 
 // Named [Action] definitions, keyed (lowercased) by name. Each carries its
@@ -92,7 +113,7 @@ export function collectActions(root: RootNode): Record<string, CollectedAction> 
     if (n.type === 'Action' && n.name) {
       actions[n.name.toLowerCase()] = {
         name: n.name,
-        steps: n.children.filter((c): c is StepNode => c.type === 'Step'),
+        steps: collectSteps(n.children),
       }
     }
   }
@@ -236,7 +257,7 @@ export interface CollectedTrigger {
   source: string
   condition: string | null
   label: string
-  steps: StepNode[]
+  steps: ActionStep[]
 }
 export function collectTriggers(root: RootNode): CollectedTrigger[] {
   return root.children
@@ -245,7 +266,7 @@ export function collectTriggers(root: RootNode): CollectedTrigger[] {
       source: t.source || '',
       condition: t.condition,
       label: t.label,
-      steps: t.children.filter((c): c is StepNode => c.type === 'Step'),
+      steps: collectSteps(t.children),
     }))
     .filter((t) => t.source) // a trigger needs a source to scan
 }

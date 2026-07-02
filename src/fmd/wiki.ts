@@ -4,7 +4,7 @@
 // semantics or runtime data.
 // -----------------------------------------------------------------------
 
-import type { Node, RootNode, BlockNode } from './types'
+import type { Node, RootNode, BlockNode, ActionStep } from './types'
 import type { Schema } from './types'
 import { collectForms, collectActions, collectTriggers, collectRoles } from './parse/schema'
 
@@ -81,7 +81,19 @@ export interface WikiStep {
   op: string
   source: string | null
   filter: string | null
+  // Set only for an outbound [Post]/[Call] step: the named connection + request path.
+  connection?: string | null
+  path?: string | null
   assigns: { field: string; expr: string }[]
+}
+
+// Normalize either step kind (record-write [Step] or outbound [PostStep]) into a
+// flat WikiStep the renderer can display uniformly.
+function toWikiStep(s: ActionStep): WikiStep {
+  if (s.type === 'PostStep') {
+    return { op: s.op, source: null, filter: null, connection: s.connection, path: s.path, assigns: s.assigns }
+  }
+  return { op: s.op, source: s.source, filter: s.filter, assigns: s.assigns }
 }
 
 export interface WikiAction {
@@ -303,12 +315,7 @@ function buildActions(root: RootNode): WikiAction[] {
     if (!a.name) gaps.push('[Action] is missing a name.')
     if (!a.steps.length) gaps.push(`Action "${a.name || '(unnamed)'}" has no steps.`)
 
-    const steps: WikiStep[] = a.steps.map((s) => ({
-      op: s.op,
-      source: s.source,
-      filter: s.filter,
-      assigns: s.assigns,
-    }))
+    const steps: WikiStep[] = a.steps.map(toWikiStep)
 
     return { name: a.name, steps, gaps }
   })
@@ -320,12 +327,7 @@ function buildTriggers(root: RootNode): WikiTrigger[] {
     label: t.label || '(no label)',
     source: t.source,
     condition: t.condition,
-    steps: t.steps.map((s) => ({
-      op: s.op,
-      source: s.source,
-      filter: s.filter,
-      assigns: s.assigns,
-    })),
+    steps: t.steps.map(toWikiStep),
   }))
 }
 

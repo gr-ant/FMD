@@ -325,6 +325,26 @@ export interface StepNode extends BaseNode {
   assigns: { field: string; expr: string }[]
 }
 
+// An outbound integration step inside an [Action]/[Trigger]:
+//   [Post -> @connection/path]  (alias [Call])
+//     Text = "Hello [[Name]]"
+// Calls OUT to a named server-side connection (see server/connections.js). The
+// indented assign lines form the request body (evaluated per row, like a
+// [Create] step). Executed via POST /api/_call/<connection> so the connection's
+// secret key stays server-side and never reaches the client.
+export interface PostStepNode extends BaseNode {
+  type: 'PostStep'
+  op: 'post'
+  connection: string // named connection (lowercased)
+  path: string // request path appended to the connection's baseUrl
+  method: string // HTTP method, default POST
+  assigns: { field: string; expr: string }[]
+}
+
+// A step in an [Action]/[Trigger]: a record-write ([Create]/[Update]/[Delete])
+// or an outbound integration call ([Post]/[Call]).
+export type ActionStep = StepNode | PostStepNode
+
 // An automation: when records in `source` match `condition`, run the indented
 // steps for each matched record (its [Update]/[Delete] without a source act on
 // the matched record; [Create -> X] reads its fields). Evaluated after every
@@ -453,6 +473,7 @@ export type Node =
   | OptionsNode
   | ActionNode
   | StepNode
+  | PostStepNode
   | TriggerNode
   | StyleNode
   | FootNode
