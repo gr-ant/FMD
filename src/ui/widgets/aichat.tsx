@@ -1,13 +1,18 @@
 // [AI Chat] widget: a message list + input that talks to the server-side
 // /api/_chat endpoint. The endpoint runs a STRICTLY READ-ONLY assistant scoped
 // to this node's `sources`, as the current user. The browser never sees the
-// Anthropic key — it only posts the question + sources + a short history.
+// Gemini key — it only posts the question + sources + a short history.
 import React, { useRef, useState, useEffect } from 'react'
 import type { AIChatNode } from '../../fmd/types'
 import { useApiBase } from '../../data'
 import { apiFetch } from '../../state/auth'
 
 interface ChatMsg { role: 'user' | 'assistant'; content: string }
+
+// Render a message, turning **bold** markdown (which the model emits) into <strong>.
+function renderBold(text: string): React.ReactNode {
+  return text.split(/\*\*/).map((seg, i) => (i % 2 === 1 ? <strong key={i}>{seg}</strong> : <span key={i}>{seg}</span>))
+}
 
 export function AIChat({ node }: { node: AIChatNode }) {
   const base = useApiBase()
@@ -62,7 +67,7 @@ export function AIChat({ node }: { node: AIChatNode }) {
           </div>
         )}
         {messages.map((m, i) => (
-          <div key={i} className={`fmd-aichat-msg fmd-aichat-${m.role}`}>{m.content}</div>
+          <div key={i} className={`fmd-aichat-msg fmd-aichat-${m.role}`}>{renderBold(m.content)}</div>
         ))}
         {busy && <div className="fmd-aichat-msg fmd-aichat-assistant fmd-aichat-typing">…</div>}
       </div>

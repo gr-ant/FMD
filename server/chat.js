@@ -7,8 +7,8 @@
 //   * SCOPED. Every tool only sees the sources the [AI Chat] node named AND that
 //     the caller's roles are allowed to READ (reuses permissions.js). A source
 //     the user can't read is invisible to the model.
-//   * SERVER-SIDE KEY. ANTHROPIC_API_KEY lives in the api container env and never
-//     reaches the browser. If it's unset, the endpoint degrades gracefully.
+//   * SERVER-SIDE KEY. The Gemini key comes from the saved `ai` config (read
+//     server-side) and never reaches the browser. If unset, it degrades gracefully.
 //
 // RAG is optional and behind a capability check: if Postgres has pgvector AND an
 // embedding key is configured we retrieve top-k rows by vector similarity;
@@ -18,11 +18,11 @@ import { pool, KIND, q } from './db.js'
 import { loadPermissions, isAllowed } from './permissions.js'
 import { fetchExternal } from './ext.js'
 
-// Cost-effective default; override with FMD_CHAT_MODEL. Most capable option is
-// `claude-opus-4-8`.
-const DEFAULT_MODEL = 'claude-haiku-4-5'
-const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages'
-const ANTHROPIC_VERSION = '2023-06-01'
+// The model + key come from the app's saved AI settings (the `ai` config — the
+// same Gemini key the builder assistant uses). Overridable via FMD_CHAT_MODEL.
+const DEFAULT_MODEL = 'gemini-2.0-flash'
+const GEMINI_URL = (model, key) =>
+  `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`
 const MAX_ROWS = 50 // cap rows any single tool call returns (bounds tokens)
 const MAX_TOOL_TURNS = 6 // safety bound on the agentic loop
 
@@ -282,17 +282,45 @@ function cosine(a, b) {
   return na && nb ? dot / (Math.sqrt(na) * Math.sqrt(nb)) : 0
 }
 
-// ---- Anthropic call --------------------------------------------------------
-async function callAnthropic(apiKey, body) {
-  const r = await fetch(ANTHROPIC_URL, {
-    method: 'POST',
-    headers: { 'x-api-key': apiKey, 'anthropic-version': ANTHROPIC_VERSION, 'content-type': 'application/json' },
-    body: JSON.stringify(body),
+// ---- Gemini call (function-calling) ----------------------------------------
+
+// The saved AI settings ({ apiKey, model }) from the `ai` config — the same key
+// the builder-side Gemini assistant uses. Read server-side; never sent to the browser.
+async function aiSettings() {
+  try {
+    const { rows } = await pool.query(`SELECT value FROM _fmd_configs WHERE key = 'ai'`)
+    return rows[0]?.value || null
+  } catch { return null }
+}
+
+// Convert an Anthropic-style JSON `input_schema` to a Gemini function-declaration
+// schema (OpenAPI subset with uppercase type names).
+function toGeminiSchema(schema) {
+  if (!schema || typeof schema !== 'object') return schema
+  const T = { object: 'OBJECT', string: 'STRING', integer: 'INTEGER', number: 'NUMBER', boolean: 'BOOLEAN', array: 'ARRAY' }
+  const out = {}
+  if (schema.type) out.type = T[schema.type] || 'STRING'
+  if (schema.description) out.description = schema.description
+  if (schema.enum) out.enum = schema.enum
+  if (schema.items) out.items = toGeminiSchema(schema.items)
+  if (schema.properties) {
+    out.properties = {}
+    for (const [k, v] of Object.entries(schema.properties)) out.properties[k] = toGeminiSchema(v)
+  }
+  if (schema.required) out.required = schema.required
+  return out
+}
+// The read-only tool set as Gemini function declarations (built once).
+const GEMINI_TOOLS = [{ functionDeclarations: READ_TOOLS.map((t) => ({ name: t.name, description: t.description, parameters: toGeminiSchema(t.input_schema) })) }]
+
+async function callGemini(apiKey, model, body) {
+  const r = await fetch(GEMINI_URL(model, apiKey), {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   })
   const text = await r.text()
   let json
-  try { json = text ? JSON.parse(text) : null } catch { throw new Error('Anthropic response was not JSON') }
-  if (!r.ok) throw new Error(json?.error?.message || `Anthropic error ${r.status}`)
+  try { json = text ? JSON.parse(text) : null } catch { throw new Error('Gemini response was not JSON') }
+  if (!r.ok) throw new Error(json?.error?.message || `Gemini error ${r.status}`)
   return json
 }
 
@@ -311,10 +339,12 @@ export function registerChatRoutes(app) {
     const { question, sources, history } = req.body || {}
     if (!question || typeof question !== 'string') return res.status(400).json({ error: 'question is required' })
 
-    const apiKey = process.env.ANTHROPIC_API_KEY
+    const ai = await aiSettings()
+    const apiKey = (ai && ai.apiKey) || process.env.GEMINI_API_KEY
+    const model = (ai && ai.model) || process.env.FMD_CHAT_MODEL || DEFAULT_MODEL
     if (!apiKey) {
-      // Graceful, non-crashing degradation when the key isn't configured.
-      return res.json({ answer: 'AI is not configured. Ask an administrator to set ANTHROPIC_API_KEY on the server.', configured: false })
+      // Graceful, non-crashing degradation when no key is configured.
+      return res.json({ answer: 'AI is not configured. Add your Gemini API key in the AI settings panel.', configured: false })
     }
 
     try {
@@ -333,7 +363,6 @@ export function registerChatRoutes(app) {
         .map((g) => `Source "${g.source}" (most relevant rows):\n${JSON.stringify(g.rows).slice(0, 3000)}`)
         .join('\n\n')
 
-      const model = process.env.FMD_CHAT_MODEL || DEFAULT_MODEL
       const system =
         'You are a READ-ONLY data assistant embedded in an app. You answer questions about the ' +
         `following data sources ONLY: ${allowed.join(', ')}. ` +
@@ -342,25 +371,32 @@ export function registerChatRoutes(app) {
         'If a question is outside the available sources, say so briefly. Be concise and cite concrete values from the data.' +
         (groundingText ? `\n\nRetrieved context to help you answer:\n${groundingText}` : '')
 
-      const messages = [...sanitizeHistory(history), { role: 'user', content: question }]
+      // Gemini function-calling loop. The model may call the read-only tools; we
+      // run each and feed the results back until it produces a text answer.
+      const geminiHistory = sanitizeHistory(history).map((m) => ({
+        role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }],
+      }))
+      const contents = [...geminiHistory, { role: 'user', parts: [{ text: question }] }]
+      const systemInstruction = { parts: [{ text: system }] }
 
       let answer = ''
       for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
-        const resp = await callAnthropic(apiKey, { model, max_tokens: 1024, system, tools: READ_TOOLS, messages })
-        const blocks = Array.isArray(resp.content) ? resp.content : []
-        if (resp.stop_reason === 'tool_use') {
-          messages.push({ role: 'assistant', content: blocks })
-          const toolResults = []
-          for (const b of blocks) {
-            if (b.type !== 'tool_use') continue
+        const resp = await callGemini(apiKey, model, { contents, tools: GEMINI_TOOLS, systemInstruction })
+        const parts = resp.candidates?.[0]?.content?.parts || []
+        const calls = parts.filter((p) => p.functionCall)
+        if (calls.length) {
+          contents.push({ role: 'model', parts })
+          const responseParts = []
+          for (const c of calls) {
             let result
-            try { result = await runTool(b.name, b.input || {}, allowed) } catch (e) { result = { error: String(e?.message || e) } }
-            toolResults.push({ type: 'tool_result', tool_use_id: b.id, content: JSON.stringify(result) })
+            try { result = await runTool(c.functionCall.name, c.functionCall.args || {}, allowed) } catch (e) { result = { error: String(e?.message || e) } }
+            const response = result && typeof result === 'object' && !Array.isArray(result) ? result : { result }
+            responseParts.push({ functionResponse: { name: c.functionCall.name, response } })
           }
-          messages.push({ role: 'user', content: toolResults })
+          contents.push({ role: 'user', parts: responseParts })
           continue
         }
-        answer = blocks.filter((b) => b.type === 'text').map((b) => b.text).join('\n').trim()
+        answer = parts.filter((p) => typeof p.text === 'string').map((p) => p.text).join('\n').trim()
         break
       }
       if (!answer) answer = 'I could not complete the request within the allowed number of steps.'
