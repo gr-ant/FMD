@@ -1,7 +1,7 @@
 // WikiPanel — renders the generated AppWiki as styled HTML in the configurator.
 // Appears as a collapsible overlay (same pattern as DataInspector).
 import React, { useState } from 'react'
-import type { AppWiki, WikiViz, WikiButton, WikiFieldRow, WikiFormField, WikiStep } from '../../fmd/wiki'
+import type { AppWiki, WikiFieldRow, WikiFormField, WikiStep } from '../../fmd/wiki'
 
 // ---- small helpers -------------------------------------------------------
 
@@ -9,25 +9,9 @@ function Gap({ msg }: { msg: string }) {
   return <div className="wiki-gap">{msg}</div>
 }
 
-function VizBadge({ viz }: { viz: string }) {
-  const icons: Record<string, string> = {
-    table: '⊞', counter: '#', checklist: '☑', slider: '▮', board: '⬜', calendar: '📅', chart: '📊',
-  }
-  return <span className="wiki-badge wiki-badge-viz">{icons[viz] || '◇'} {viz}</span>
-}
-
 function KindBadge({ kind }: { kind: 'list' | 'store' | 'api' }) {
   const labels: Record<string, string> = { list: 'SQL table', store: 'document', api: 'external API' }
   return <span className={`wiki-badge wiki-badge-kind wiki-badge-${kind}`}>{labels[kind] ?? kind}</span>
-}
-
-/** Describe CRUD flags in plain English. */
-function crudDesc(v: WikiViz): string | null {
-  const ops: string[] = []
-  if (v.canCreate) ops.push('create')
-  if (v.canUpdate) ops.push('edit')
-  if (v.canDelete) ops.push('delete')
-  return ops.length ? ops.join(' / ') : null
 }
 
 // ---- section components --------------------------------------------------
@@ -91,41 +75,24 @@ function DataModelSection({ wiki }: { wiki: AppWiki }) {
   )
 }
 
+// Render a guide sentence, turning **label** markers into bold clickable-name spans.
+function prose(text: string): React.ReactNode {
+  return text.split(/\*\*/).map((seg, i) =>
+    i % 2 === 1 ? <strong key={i} className="wiki-ui-name">{seg}</strong> : <span key={i}>{seg}</span>)
+}
+
 function PagesSection({ wiki }: { wiki: AppWiki }) {
   return (
     <section className="wiki-section">
-      <h2 className="wiki-h2">Pages</h2>
+      <h2 className="wiki-h2">Using the app</h2>
       {wiki.pages.length === 0 && <p className="wiki-empty-note">No [Display] pages declared yet.</p>}
       {wiki.pages.map((pg) => (
         <div key={pg.name} className="wiki-page-block">
           <h3 className="wiki-h3">{pg.name}</h3>
           {pg.gaps.map((g, i) => <Gap key={i} msg={g} />)}
-          {pg.vizzes.length > 0 && (
-            <ul className="wiki-viz-list">
-              {pg.vizzes.map((v: WikiViz, i) => {
-                const crud = crudDesc(v)
-                return (
-                  <li key={i} className="wiki-viz-item">
-                    <VizBadge viz={v.viz} />
-                    {v.source && <> <span className="wiki-arrow">→</span> <code>{v.source}</code></>}
-                    {v.filter && <span className="wiki-filter"> where <em>{v.filter}</em></span>}
-                    {crud && <span className="wiki-crud-tag">{crud}</span>}
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-          {pg.buttons.length > 0 && (
-            <ul className="wiki-btn-list">
-              {pg.buttons.map((b: WikiButton, i) => (
-                <li key={i} className="wiki-btn-item">
-                  <span className="wiki-badge wiki-badge-btn">Button</span>
-                  <span className="wiki-btn-label">"{b.label}"</span>
-                  {b.target && <><span className="wiki-arrow">→</span><code>{b.target}</code></>}
-                </li>
-              ))}
-            </ul>
-          )}
+          {pg.guide.length > 0
+            ? <ul className="wiki-task-list">{pg.guide.map((t, i) => <li key={i} className="wiki-task">{prose(t)}</li>)}</ul>
+            : <p className="wiki-empty-note">This page has no interactive elements yet.</p>}
         </div>
       ))}
     </section>
@@ -313,7 +280,7 @@ export default function WikiPanel({ wiki, onClose }: Props) {
   const sections = [
     { id: 'overview', label: 'Overview' },
     { id: 'data', label: `Data (${wiki.entities.length})` },
-    { id: 'pages', label: `Pages (${wiki.pages.length})` },
+    { id: 'pages', label: `Guide (${wiki.pages.length})` },
     { id: 'forms', label: `Forms (${wiki.forms.length})` },
     { id: 'automations', label: `Automations (${wiki.actions.length + wiki.triggers.length})` },
     { id: 'permissions', label: `Permissions` },

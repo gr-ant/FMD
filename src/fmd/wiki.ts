@@ -7,6 +7,7 @@
 import type { Node, RootNode, BlockNode, ActionStep } from './types'
 import type { Schema } from './types'
 import { collectForms, collectActions, collectTriggers, collectRoles } from './parse/schema'
+import { fieldName } from '../parser'
 
 // ---- Output types -------------------------------------------------------
 
@@ -62,6 +63,10 @@ export interface WikiButton {
 
 export interface WikiPage {
   name: string
+  // Natural-language, task-oriented instructions for using this page — the
+  // end-user guide ("To add a work order, click New Work Order and fill out …").
+  // Each string is one imperative sentence; **bold** marks a clickable label.
+  guide: string[]
   vizzes: WikiViz[]
   buttons: WikiButton[]
   gaps: string[]
@@ -189,6 +194,138 @@ function collectPageElements(root: Node): { vizzes: WikiViz[]; buttons: WikiButt
   return { vizzes, buttons }
 }
 
+// ---- Natural-language page guide ----------------------------------------
+
+/** The display name of a source (the declared entity name, humanised). */
+function sourceName(schema: Schema, source: string | null): string {
+  if (!source) return 'records'
+  const e = schema[source.toLowerCase()]
+  return humanise(e?.name || source)
+}
+
+/** Naive singular ("Work Orders" -> "Work Order") for prose like "add a …". */
+function singular(s: string): string {
+  return /ies$/i.test(s) ? s.replace(/ies$/i, 'y') : /s$/i.test(s) && !/ss$/i.test(s) ? s.replace(/s$/i, '') : s
+}
+
+/** Oxford-comma join: ["a","b","c"] -> "a, b, and c". */
+function oxford(items: string[], conj = 'and'): string {
+  const xs = items.filter(Boolean)
+  if (xs.length <= 1) return xs[0] || ''
+  if (xs.length === 2) return `${xs[0]} ${conj} ${xs[1]}`
+  return `${xs.slice(0, -1).join(', ')}, ${conj} ${xs[xs.length - 1]}`
+}
+
+/** Split a viz `spec` ("Customer, Status") into humanised column labels. */
+function specCols(spec: string): string[] {
+  return String(spec || '').split(',').map((s) => humanise(s.trim())).filter(Boolean)
+}
+
+// Turn a single page's elements into task-oriented, end-user instructions.
+// Deterministic prose from the config's own labels — no generated filler.
+function buildPageGuide(
+  page: Node,
+  schema: Schema,
+  forms: WikiForm[],
+  actionNames: Set<string>,
+): string[] {
+  const tasks: string[] = []
+
+  // A [Button -> X] may name the form by its title, or by the source it writes to
+  // (with the label matching the title). Resolve either way.
+  const findForm = (label: string, target: string | null): WikiForm | null => {
+    const t = String(target || '').toLowerCase()
+    const l = String(label || '').toLowerCase()
+    return forms.find((f) => f.title.toLowerCase() === t)
+      || forms.find((f) => (f.source || '').toLowerCase() === t && f.title.toLowerCase() === l)
+      || forms.find((f) => (f.source || '').toLowerCase() === t)
+      || forms.find((f) => f.title.toLowerCase() === l)
+      || null
+  }
+
+  const describeButton = (label: string, target: string | null): void => {
+    const form = findForm(label, target)
+    if (form) {
+      const thing = singular(sourceName(schema, form.source)).toLowerCase()
+      const fieldList = form.fields.map((f) => f.label).filter(Boolean)
+      let s = `To add a ${thing}, click **${label}** and fill out the form`
+      if (fieldList.length) s += ` (${fieldList.join(', ')})`
+      if (form.lineItems && form.lineItems.cols.length) {
+        s += `, adding a line for each item (${form.lineItems.cols.join(', ')})`
+      }
+      s += '.'
+      if (form.totals.length) {
+        const names = form.totals.map((t) => t.name)
+        s += ` The ${oxford(names)} ${names.length > 1 ? 'are' : 'is'} worked out for you.`
+      }
+      tasks.push(s)
+    } else if (actionNames.has(String(target || '').toLowerCase())) {
+      tasks.push(`Click **${label}** to run the “${target}” action.`)
+    } else {
+      tasks.push(`Click **${label}** to open its form.`)
+    }
+  }
+
+  const describeViz = (n: import('./types').VizNode): void => {
+    const src = sourceName(schema, n.source)
+    const cols = specCols(n.spec)
+    if (n.viz === 'table') {
+      let s = `The **${src}** table lists ${cols.length ? oxford(cols) : `your ${src.toLowerCase()}`}.`
+      const ops: string[] = []
+      if (n.crud.includes('c')) ops.push('add a new one in the empty bottom row')
+      if (n.crud.includes('u')) ops.push('edit any value by clicking the cell')
+      if (n.crud.includes('d')) ops.push('remove a row with its ✕ button')
+      if (ops.length) s += ` You can ${oxford(ops)}.`
+      tasks.push(s)
+    } else if (n.viz === 'board') {
+      tasks.push(`${src} are shown on a board grouped by **${cols[0] || 'status'}** — each column is a stage and shows how many items it holds.`)
+    } else if (n.viz === 'calendar') {
+      tasks.push(`${src} appear on a month calendar, placed by their **${cols[0] || 'date'}** date.`)
+    } else if (n.viz === 'counter') {
+      tasks.push(`The **${src}** summary shows key totals at the top of the page.`)
+    } else if (n.viz === 'checklist') {
+      tasks.push(`${src} are shown as a checklist — tick an item to mark it done.`)
+    } else if (n.viz === 'chart') {
+      tasks.push(`A chart summarises ${src}${cols.length ? ` by ${cols[0]}` : ''}.`)
+    } else if (n.viz === 'slider') {
+      tasks.push(`${src} are shown as progress bars.`)
+    }
+    for (const c of n.children) {
+      if (c.type === 'RowButton') tasks.push(`Each ${singular(src.toLowerCase())} row has a **${c.label}** button.`)
+    }
+  }
+
+  // Walk the page, describing each interactive element. Don't descend into a
+  // [Cases]/[Detail]'s children (that content lives on the record's own sub-page).
+  const recurse = (node: Node): void => {
+    for (const c of node.children) {
+      switch (c.type) {
+        case 'Viz': describeViz(c); break
+        case 'Cases': {
+          const cols = specCols(c.spec)
+          const link = cols[0] || 'first column'
+          const thing = singular(sourceName(schema, c.source).toLowerCase())
+          tasks.push(`To open a ${thing}, click its **${link}** in the ${sourceName(schema, c.source)} list — that opens the full record page.`)
+          break
+        }
+        case 'Detail':
+          tasks.push(`Choose a ${sourceName(schema, c.source)} record from the dropdown to see its full details.`)
+          break
+        case 'View':
+          tasks.push(`This shows the “${c.form}” details, read-only.`)
+          break
+        case 'AIChat':
+          tasks.push(`Ask the assistant about ${oxford((c.sources || []).map((s) => sourceName(schema, s)))} — it can look things up for you but never changes your data.`)
+          break
+        case 'Button': describeButton(c.label, c.target); break
+        default: recurse(c)
+      }
+    }
+  }
+  recurse(page)
+  return tasks
+}
+
 // ---- Section generators -------------------------------------------------
 
 function buildEntities(schema: Schema): WikiEntity[] {
@@ -241,8 +378,9 @@ function buildEntities(schema: Schema): WikiEntity[] {
   })
 }
 
-function buildPages(root: RootNode): WikiPage[] {
+function buildPages(root: RootNode, schema: Schema, forms: WikiForm[]): WikiPage[] {
   const pages: WikiPage[] = []
+  const actionNames = new Set(Object.keys(collectActions(root)))
 
   for (const n of root.children) {
     if (n.type !== 'Block') continue
@@ -256,12 +394,13 @@ function buildPages(root: RootNode): WikiPage[] {
     }
 
     const { vizzes, buttons } = collectPageElements(n)
+    const guide = buildPageGuide(n, schema, forms, actionNames)
 
-    if (!vizzes.length && !buttons.length) {
-      gaps.push(`Page "${name || '(unnamed)'}" has no visualisations or buttons yet.`)
+    if (!guide.length) {
+      gaps.push(`Page "${name || '(unnamed)'}" has nothing on it yet.`)
     }
 
-    pages.push({ name: name || '(unnamed)', vizzes, buttons, gaps })
+    pages.push({ name: name || '(unnamed)', guide, vizzes, buttons, gaps })
   }
 
   return pages
@@ -291,7 +430,7 @@ function buildForms(root: RootNode): WikiForm[] {
     }))
 
     const lineItems: WikiLineItems | null = f.lineItems
-      ? { source: f.lineItems.source, cols: f.lineItems.cols.map((c) => c.label || c.field) }
+      ? { source: f.lineItems.source, cols: f.lineItems.cols.map((c) => humanise(fieldName(c.field) || c.field)) }
       : null
 
     const totals: WikiTotal[] = f.totals.map((t) => ({ name: t.name, expr: t.expr }))
@@ -357,8 +496,8 @@ export function generateWiki(root: RootNode, schema: Schema): AppWiki {
 
   const roles = collectRoles(root)
   const entities = buildEntities(schema)
-  const pages = buildPages(root)
   const forms = buildForms(root)
+  const pages = buildPages(root, schema, forms)
   const actions = buildActions(root)
   const triggers = buildTriggers(root)
   const permMatrix = buildPermMatrix(schema, roles)
@@ -410,22 +549,13 @@ export function wikiToMarkdown(wiki: AppWiki): string {
     }
   }
 
-  // Pages
-  h2('Pages')
+  // Using the app — the natural-language, task-oriented page guide.
+  h2('Using the app')
   for (const pg of wiki.pages) {
     h3(pg.name)
     pg.gaps.forEach(gap)
-    for (const v of pg.vizzes) {
-      const src = v.source ? `→ ${v.source}` : '(no source)'
-      const filter = v.filter ? ` where ${v.filter}` : ''
-      const crud = v.canCreate || v.canUpdate || v.canDelete ? ` · ${crudLabel(
-        (v.canCreate ? 'c' : '') + (v.canUpdate ? 'u' : '') + (v.canDelete ? 'd' : '')
-      )}` : ''
-      li(`${v.viz} ${src}${filter}${crud}`)
-    }
-    for (const b of pg.buttons) {
-      li(`Button: "${b.label}"${b.target ? ` → ${b.target}` : ''}`)
-    }
+    if (pg.guide.length) pg.guide.forEach((t) => li(t.replace(/\*\*/g, '')))
+    else p('This page has no interactive elements yet.')
     lines.push('')
   }
 
