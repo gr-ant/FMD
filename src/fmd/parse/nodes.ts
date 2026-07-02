@@ -446,6 +446,17 @@ function parseNodeInner(line: string): Node {
       const b = splitSourceFilter(innerSource)
       return { type: 'Trigger', source: b.source, condition: b.filter, label: content.trim(), children: [] }
     }
+    // An outbound integration step: [Post -> @connection/path] (alias [Call]).
+    // The binding names a server-side connection (leading `@`) plus an optional
+    // request path; the indented `Field = expr` lines form the request body. The
+    // secret key stays server-side — the client calls POST /api/_call/<conn>.
+    if (first === 'post' || first === 'call') {
+      const raw = (innerSource || '').trim().replace(/^@/, '')
+      const slash = raw.indexOf('/')
+      const connection = (slash === -1 ? raw : raw.slice(0, slash)).trim().toLowerCase()
+      const path = slash === -1 ? '' : raw.slice(slash + 1).trim()
+      return { type: 'PostStep', op: 'post', connection, path, method: 'POST', assigns: parseAssignments(content), children: [] }
+    }
     // An action step that writes records: [Create -> Src] f = v, [Update -> Src
     // ? cond] f = v, [Delete -> Src ? cond]. Source + `?` filter parse exactly
     // like a viz binding; the content is the assignment list (none for delete).

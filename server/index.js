@@ -20,6 +20,7 @@ import { registerDeployRoutes } from './deploy.js'
 import { registerUserRoutes } from './users.js'
 import { registerCrudRoutes } from './crud.js'
 import { registerExtRoutes } from './ext.js'
+import { registerConnectionRoutes } from './connections.js'
 import { registerFileRoutes } from './files.js'
 import { registerTriggerRoutes, startTriggerSweep } from './triggers.js'
 
@@ -43,6 +44,7 @@ registerDeployRoutes(app)
 registerUserRoutes(app)
 registerTriggerRoutes(app) // _triggers/run — before the catch-all /api/:source
 registerExtRoutes(app) // _ext/* — external API data sources, before /api/:source
+registerConnectionRoutes(app) // _conn(s)/* + _call/* — outbound integrations, before /api/:source
 registerFileRoutes(app) // _files/* — file upload/download, before /api/:source
 registerCrudRoutes(app)
 

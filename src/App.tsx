@@ -25,6 +25,7 @@ import Preview from './ui/Preview'
 import { useIsMobile } from './ui/useIsMobile'
 import AiChat from './ui/panels/AiChat'
 import ManageDeployments from './ui/panels/ManageDeployments'
+import Integrations from './ui/panels/Integrations'
 import ApiSetup, { findApiBlocks, parseApiBlock, spliceApiBlock } from './ui/panels/ApiSetup'
 import { fixFmd, DEFAULT_MODEL, type AiSettings } from './ai/gemini'
 import { useDialogs } from './ui/dialogs'
@@ -93,6 +94,7 @@ export default function App() {
   const [showAi, setShowAi] = useState(false)
   const [aiFixing, setAiFixing] = useState(false)
   const [showDb, setShowDb] = useState(false)
+  const [showConns, setShowConns] = useState(false)
   const [showUsers, setShowUsers] = useState(false)
   const [apiSetup, setApiSetup] = useState<{ name: string } | null>(null) // open [API] wizard for this block
   // Effective roles for `{Role, !Role}` visibility in the EDITOR preview. The
@@ -490,6 +492,7 @@ export default function App() {
                 <button key={b.line} className="me-menu-item" onClick={() => { setApiSetup({ name: b.name }); setMobileMenu(false) }}>⚙ Connect {b.name} API</button>
               ))}
               <button className="me-menu-item" onClick={() => { setShowData(true); setMobileMenu(false) }}>🗂 Data model</button>
+              <button className="me-menu-item" onClick={() => { setShowConns(true); setMobileMenu(false) }}>🔌 Integrations</button>
               <button className="me-menu-item" onClick={() => { setShowDb(true); setMobileMenu(false) }}>📦 Manage Deployments</button>
               <button className="me-menu-item" onClick={() => { setShowUsers(true); setMobileMenu(false) }}>👤 Users</button>
               <button className="me-menu-item danger" onClick={() => { resetToFile(); setMobileMenu(false) }}>↺ Reset to file</button>
@@ -498,6 +501,7 @@ export default function App() {
         )}
 
         {showData && <DataInspector schema={schema} store={store || {}} />}
+        {showConns && <Integrations onClose={() => setShowConns(false)} />}
         {showDb && <ManageDeployments onClose={() => setShowDb(false)} />}
         {showUsers && <UserManagement roles={appRoles} onClose={() => setShowUsers(false)} />}
         {apiSetup && (
@@ -566,6 +570,7 @@ export default function App() {
                 {showData ? 'Hide data model' : 'Data model'}
               </button>
               <ImportFiles onImport={importFiles} />
+              <button className="toggle" onClick={() => setShowConns(true)} title="Integrations — manage outbound connections (Slack, REST, …)">🔌 Integrations</button>
               <button className="toggle" onClick={() => setShowDb(true)} title="Manage deployments — rename, download, delete">📦 Manage Deployments</button>
               <button className="toggle" onClick={() => setShowUsers(true)} title="User management (Authentik)">👤 Users</button>
               <button className="toggle" onClick={resetToFile} title="Discard the saved document and reload app.fmd">↺ Reset to file</button>
@@ -642,6 +647,7 @@ export default function App() {
 
         {showData && <DataInspector schema={schema} store={store || {}} />}
       </div>
+      {showConns && <Integrations onClose={() => setShowConns(false)} />}
       {showDb && <ManageDeployments onClose={() => setShowDb(false)} />}
       {showUsers && <UserManagement roles={appRoles} onClose={() => setShowUsers(false)} />}
       {apiSetup && (

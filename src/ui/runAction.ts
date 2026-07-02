@@ -6,7 +6,7 @@
 import { passes } from '../fmd/rules'
 import { buildBody } from '../fmd/actions'
 import { apiFetch, dataBase } from '../state/auth'
-import { FmdRecord, StepNode } from '../fmd/types'
+import { FmdRecord, PostStepNode, ActionStep } from '../fmd/types'
 
 // The named-rule map (rule name -> expression) used by `?` filters.
 type RuleMap = Record<string, unknown>
@@ -15,7 +15,7 @@ type RuleMap = Record<string, unknown>
 // ordered write steps.
 interface ActionLike {
   name?: string
-  steps?: StepNode[]
+  steps?: ActionStep[]
 }
 
 // Per-step execution summary returned to the caller.
@@ -30,12 +30,35 @@ const api = (apiBase: string, source: string): string => dataBase(apiBase, sourc
 const jsonPost = (url: string, method: string, body: FmdRecord): Promise<Response> =>
   apiFetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
 
+// An outbound [Post]/[Call] step: build the request body from the assigns (per
+// the current case record, if any) and POST it through the server's /api/_call
+// proxy. The connection's secret key stays server-side — the client only names
+// the connection. Runs from the EDITOR base (/api) so it works in both editor +
+// deployed app (connections are global, server-side).
+async function runPostStep(step: PostStepNode, caseRecord: FmdRecord | null): Promise<StepResult> {
+  const body = buildBody(step.assigns, caseRecord || {})
+  const url = `/api/_call/${encodeURIComponent(step.connection)}`
+  const label = `@${step.connection}${step.path ? '/' + step.path : ''}`
+  try {
+    const r = await jsonPost(url, 'POST', { path: step.path, method: step.method, body })
+    const out = (await r.json().catch((): unknown => null)) as { ok?: boolean; status?: number } | null
+    // The proxy always 200s with { status, ok, body }; a non-2xx upstream shows
+    // as out.ok === false. Surface either transport or upstream failure.
+    const ok = r.ok && out && out.ok !== false
+    return { op: 'post', source: label, count: ok ? 1 : 0, error: ok ? null : `HTTP ${out?.status ?? r.status}` }
+  } catch (e) {
+    return { op: 'post', source: label, count: 0, error: String(e) }
+  }
+}
+
 // `caseRecord`/`caseSource` are the current [Cases]/[Detail] case (when an action
 // runs from a button inside one). A step with NO `-> source` acts on that record.
 async function runStep(
-  step: StepNode, rules: RuleMap, apiBase: string,
+  step: ActionStep, rules: RuleMap, apiBase: string,
   caseRecord: FmdRecord | null, caseSource: string | null,
 ): Promise<StepResult> {
+  // Outbound integration step — routed through the server-side connection proxy.
+  if (step.type === 'PostStep') return runPostStep(step, caseRecord)
   // No explicit source: act on the current case record (set its fields / delete it).
   if (!step.source) {
     if (!caseRecord || caseRecord._id == null || !caseSource) {
@@ -95,7 +118,7 @@ export async function executeAction(
     try {
       results.push(await runStep(step, rules || {}, base, record, source))
     } catch (e) {
-      results.push({ op: step.op, source: step.source, count: 0, error: String(e) })
+      results.push({ op: step.op, source: 'source' in step ? step.source : null, count: 0, error: String(e) })
     }
   }
   return results
