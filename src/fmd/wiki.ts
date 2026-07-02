@@ -229,9 +229,11 @@ function buildPageGuide(
   page: Node,
   schema: Schema,
   forms: WikiForm[],
-  actionNames: Set<string>,
+  actions: WikiAction[],
 ): string[] {
   const tasks: string[] = []
+  const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1)
+  const actionByName = new Map(actions.map((a) => [a.name.toLowerCase(), a]))
 
   // A [Button -> X] may name the form by its title, or by the source it writes to
   // (with the label matching the title). Resolve either way.
@@ -245,7 +247,27 @@ function buildPageGuide(
       || null
   }
 
-  const describeButton = (label: string, target: string | null): void => {
+  // One step of an action, in plain English (used to reveal what a button does —
+  // especially when it writes to several tables at once).
+  const stepPhrase = (s: WikiStep): string => {
+    const src = sourceName(schema, s.source)
+    if (s.op === 'create') return `adds a ${singular(src)}`
+    if (s.op === 'update') return `updates ${src}`
+    if (s.op === 'delete') return `removes a ${singular(src)}`
+    if (s.op === 'post') return `sends a message via ${s.connection}`
+    return `changes ${src}`
+  }
+  // A one-line summary of what an action does across every table it touches.
+  const actionSummary = (target: string | null): string | null => {
+    const a = actionByName.get(String(target || '').toLowerCase())
+    if (!a || !a.steps.length) return null
+    return oxford(a.steps.map(stepPhrase))
+  }
+
+  // Describe a button. `prefix` frames it (e.g. "On the ticket's page,"); empty
+  // for a page-level button. Form buttons open a form; action buttons summarise
+  // every table the action changes.
+  const describeButton = (label: string, target: string | null, prefix = ''): void => {
     const form = findForm(label, target)
     if (form) {
       const thing = singular(sourceName(schema, form.source)).toLowerCase()
@@ -261,11 +283,13 @@ function buildPageGuide(
         s += ` The ${oxford(names)} ${names.length > 1 ? 'are' : 'is'} worked out for you.`
       }
       tasks.push(s)
-    } else if (actionNames.has(String(target || '').toLowerCase())) {
-      tasks.push(`Click **${label}** to run the “${target}” action.`)
-    } else {
-      tasks.push(`Click **${label}** to open its form.`)
+      return
     }
+    const summary = actionSummary(target)
+    const core = summary
+      ? `click **${label}** — this ${summary}`
+      : `click **${label}** to run the “${target}” action`
+    tasks.push(prefix ? `${prefix} ${core}.` : `${cap(core)}.`)
   }
 
   // Labels of the [Count]/[Slide] KPI items nested in a counter/slider.
@@ -325,6 +349,17 @@ function buildPageGuide(
           const link = cols[0] || 'first column'
           const thing = singular(sourceName(schema, c.source).toLowerCase())
           tasks.push(`To open a ${thing}, click its **${link}** in the ${sourceName(schema, c.source)} list — that opens the full record page.`)
+          // Buttons declared under the [Cases] render ON the opened record page.
+          // Describe each (an action button reveals every table it changes).
+          const caseButtons: { label: string; target: string | null }[] = []
+          const collectBtns = (node: Node): void => {
+            for (const ch of node.children) {
+              if (ch.type === 'Button' || ch.type === 'RowButton') caseButtons.push({ label: ch.label, target: ch.target })
+              else collectBtns(ch)
+            }
+          }
+          collectBtns(c)
+          for (const btn of caseButtons) describeButton(btn.label, btn.target, `On a ${thing}'s page,`)
           break
         }
         case 'Detail':
@@ -417,9 +452,8 @@ function buildEntities(schema: Schema): WikiEntity[] {
   })
 }
 
-function buildPages(root: RootNode, schema: Schema, forms: WikiForm[]): WikiPage[] {
+function buildPages(root: RootNode, schema: Schema, forms: WikiForm[], actions: WikiAction[]): WikiPage[] {
   const pages: WikiPage[] = []
-  const actionNames = new Set(Object.keys(collectActions(root)))
 
   for (const n of root.children) {
     if (n.type !== 'Block') continue
@@ -433,7 +467,7 @@ function buildPages(root: RootNode, schema: Schema, forms: WikiForm[]): WikiPage
     }
 
     const { vizzes, buttons } = collectPageElements(n)
-    const guide = buildPageGuide(n, schema, forms, actionNames)
+    const guide = buildPageGuide(n, schema, forms, actions)
 
     if (!guide.length) {
       gaps.push(`Page "${name || '(unnamed)'}" has nothing on it yet.`)
@@ -574,8 +608,8 @@ export function generateWiki(root: RootNode, schema: Schema): AppWiki {
   const roles = collectRoles(root)
   const entities = buildEntities(schema)
   const forms = buildForms(root)
-  const pages = buildPages(root, schema, forms)
   const actions = buildActions(root)
+  const pages = buildPages(root, schema, forms, actions)
   const triggers = buildTriggers(root)
   const permMatrix = buildPermMatrix(schema, roles)
   const permSummary = buildPermSummary(schema, roles)
