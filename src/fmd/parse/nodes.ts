@@ -453,6 +453,13 @@ function parseNodeInner(line: string): Node {
       const b = splitSourceFilter(innerSource)
       return { type: 'Step', op: first, source: b.source, filter: b.filter, assigns: first === 'delete' ? [] : parseAssignments(content), children: [] }
     }
+    // An in-app AI chat assistant bound to a comma-separated list of sources:
+    // [AI Chat] Orders, Customers, Inventory. Renders a chat panel that answers
+    // questions about ONLY those sources. Read-only (see server/chat.js).
+    if (lowerInner === 'ai chat' || first === 'aichat' || lowerInner === 'chat') {
+      const sources = content.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
+      return { type: 'AIChat', sources, children: [] }
+    }
     // Generic block: a container if children get indented under it, else a
     // labeled leaf element.
     return { type: 'Block', tag: inner, value: content, source: innerSource || contentSource, children: [] }

@@ -1123,3 +1123,45 @@ table td.muted-cell { padding: 22px 10px; opacity: .8; text-align: center; }
 .api-preview { border: 1px solid var(--line); border-radius: 8px; }
 .api-preview .viz-table { font-size: 12px; }
 .api-preview .viz-table th, .api-preview .viz-table td { padding: 6px 9px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---- [AI Chat] widget --------------------------------------------------- */
+.fmd-aichat {
+  display: flex; flex-direction: column; max-height: 520px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+  margin: 0 0 18px; overflow: hidden;
+}
+.fmd-aichat-head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  padding: 10px 14px; background: var(--panel-2); border-bottom: 1px solid var(--line);
+}
+.fmd-aichat-title { font-weight: 600; font-size: 14px; color: var(--text); }
+.fmd-aichat-sources { font-size: 11px; color: var(--muted); text-transform: capitalize; }
+.fmd-aichat-msgs {
+  flex: 1; min-height: 120px; overflow-y: auto; padding: 14px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.fmd-aichat-empty { color: var(--muted); font-size: 13px; text-align: center; margin: auto 0; padding: 10px; }
+.fmd-aichat-msg {
+  max-width: 82%; padding: 9px 12px; border-radius: 12px; font-size: 13px;
+  line-height: 1.45; white-space: pre-wrap; word-break: break-word;
+}
+.fmd-aichat-user {
+  align-self: flex-end; background: var(--accent); color: var(--btn-text, #07131f);
+  border-bottom-right-radius: 4px;
+}
+.fmd-aichat-assistant {
+  align-self: flex-start; background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--line); border-bottom-left-radius: 4px;
+}
+.fmd-aichat-typing { color: var(--muted); letter-spacing: 2px; }
+.fmd-aichat-input {
+  display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--line); background: var(--panel);
+}
+.fmd-aichat-input textarea {
+  flex: 1; resize: none; background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px;
+  font: inherit; font-size: 13px; line-height: 1.4; max-height: 120px;
+}
+.fmd-aichat-input textarea:focus { outline: none; border-color: var(--accent); }
+.fmd-aichat-input .fmd-button { margin: 0; align-self: flex-end; }
+.fmd-aichat-input .fmd-button:disabled { opacity: .5; cursor: not-allowed; }
