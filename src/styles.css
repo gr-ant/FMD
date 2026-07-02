@@ -234,10 +234,13 @@ select.cell-input option { background: var(--panel); color: var(--text); }
 
 /* board (kanban) */
 .board { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 4px; }
-.board-col { flex: 0 0 200px; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 8px; }
+.board-col { flex: 0 0 200px; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 8px; transition: border-color .15s, background .15s; }
+.board-col-over { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--bg)); }
 .board-col-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
 .board-count { background: var(--line); border-radius: 999px; padding: 0 7px; font-size: 11px; }
 .board-card { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 13px; margin-bottom: 6px; }
+.board-card[draggable="true"] { cursor: grab; }
+.board-card[draggable="true"]:active { cursor: grabbing; opacity: .7; }
 
 /* chart ([Chart -> Src] Label / Value, [Kind] bar|line|pie|donut) */
 .viz-chart { width: 100%; }

@@ -726,9 +726,15 @@ function VizSlider({ node }: { node: VizNode }): React.ReactNode {
 }
 
 // A kanban board grouped by a field: [Board -> WorkOrders] Status.
+// Cards are draggable between columns when the user has update permission;
+// dropping a card PATCHes its group field to the target column's value.
 function VizBoard({ node }: { node: VizNode }): React.ReactNode {
   const rows = filterRows(useSource(node.source), node.filter, useRules())
   const fields = useFields(node.source)
+  const refresh = useRefresh()
+  const base = useApiBase()
+  const permits = usePermits(node.source)
+  const [dragOver, setDragOver] = useState<string | null>(null)
   if (!rows) return <Empty source={node.source} />
   const groupDef = node.spec ? resolveField(fields, rows, node.spec) : null
   const groupKey = groupDef?.key || (rows[0] && keysOf(rows).find((k) => k !== '_id'))
@@ -736,14 +742,46 @@ function VizBoard({ node }: { node: VizNode }): React.ReactNode {
   const declared = fieldDef(fields, groupKey)?.options?.values
   const distinct = [...new Set(rows.map((r) => String(r[groupKey] ?? '')).filter(Boolean))]
   const columns = declared && declared.length ? declared : distinct
+  const canDrag = permits.update
+  const handleDrop = (colValue: string, e: React.DragEvent): void => {
+    e.preventDefault()
+    setDragOver(null)
+    const id = e.dataTransfer.getData('text/plain')
+    if (!id || !groupKey) return
+    const row = rows.find((r) => String(r._id) === id)
+    if (!row || String(row[groupKey] ?? '') === colValue) return
+    apiFetch(`${dataBase(base, node.source)}/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [groupKey]: colValue }),
+    }).then(refresh)
+  }
   return (
     <div className="board">
       {columns.map((col, i) => {
         const cards = rows.filter((r) => String(r[groupKey] ?? '') === col)
         return (
-          <div className="board-col" key={i}>
+          <div
+            className={`board-col${dragOver === col ? ' board-col-over' : ''}`}
+            key={i}
+            onDragOver={canDrag ? (e) => { e.preventDefault(); setDragOver(col) } : undefined}
+            onDragLeave={canDrag ? () => setDragOver(null) : undefined}
+            onDrop={canDrag ? (e) => handleDrop(col, e) : undefined}
+          >
             <div className="board-col-head">{col}<span className="board-count">{cards.length}</span></div>
-            {cards.map((r, ri) => <div className="board-card" key={ri}>{formatValue(r[labelKey], fieldType(fields, labelKey))}</div>)}
+            {cards.map((r, ri) => (
+              <div
+                className="board-card"
+                key={ri}
+                draggable={canDrag && r._id != null}
+                onDragStart={canDrag && r._id != null ? (e) => {
+                  e.dataTransfer.setData('text/plain', String(r._id))
+                  e.dataTransfer.effectAllowed = 'move'
+                } : undefined}
+              >
+                {formatValue(r[labelKey], fieldType(fields, labelKey))}
+              </div>
+            ))}
           </div>
         )
       })}
