@@ -36,7 +36,7 @@ export const qn = (schema, id) => `${q(schema)}.${q(id)}` // schema-qualified id
 export const sendErr = (res, e) => res.status(e?.status || 500).json({ error: e?.body || e?.message || String(e) })
 
 // FMD field type (from the txt/num/cur/bool/date prefix) -> Postgres column type.
-const SQL_TYPE = { text: 'TEXT', memo: 'TEXT', number: 'NUMERIC', currency: 'NUMERIC(12,2)', boolean: 'BOOLEAN', date: 'DATE', drop: 'TEXT', link: 'TEXT', msel: 'TEXT' }
+const SQL_TYPE = { text: 'TEXT', memo: 'TEXT', number: 'NUMERIC', currency: 'NUMERIC(12,2)', boolean: 'BOOLEAN', date: 'DATE', drop: 'TEXT', link: 'TEXT', msel: 'TEXT', file: 'TEXT', files: 'TEXT' }
 export const sqlTypeFor = (t) => SQL_TYPE[t] || 'TEXT'
 
 // Every [List] table gets a reserved `_id` row identifier (for CRUD), separate
@@ -59,7 +59,7 @@ export async function listColumns(table) {
 export const cleanVal = (v) => (v === '' ? null : v)
 
 // Source names FMD uses for its own tables; a [List]/[Store] can't reuse them.
-export const RESERVED_SOURCES = new Set(['_fmd_documents', '_fmd_configs'])
+export const RESERVED_SOURCES = new Set(['_fmd_documents', '_fmd_configs', '_fmd_files'])
 // The reserved names a model tries to use (lowercased, de-duped), if any. Any
 // `_`-prefixed name is reserved for FMD internals; `documents`/`configs` are now
 // ordinary, usable entity names.
@@ -161,6 +161,22 @@ export async function init() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )`)
 
+  // Uploaded files ([File]/[Files] fields). Global + shared across apps; the
+  // record only stores a small {id,name,mime} descriptor pointing here. `source`
+  // is the owning entity: downloads re-check the caller's READ permission on it,
+  // so files inherit the same access control as their records. The blob is `data`.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS _fmd_files (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      mime TEXT NOT NULL,
+      size INTEGER NOT NULL DEFAULT 0,
+      source TEXT,
+      data BYTEA NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )`)
+  await pool.query(`ALTER TABLE _fmd_files ADD COLUMN IF NOT EXISTS source TEXT`) // migrate older tables
+
   // Rebuild the routing map from what is PHYSICALLY in the database, so entities
   // applied in a previous session (via /api/_apply) keep routing across API
   // restarts -- the seed alone no longer knows about them. Stores are registered
@@ -171,7 +187,7 @@ export async function init() {
   const { rows: tableRows } = await pool.query(
     `SELECT table_name FROM information_schema.tables
      WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
-       AND table_name NOT IN ('_fmd_configs', '_fmd_documents')`)
+       AND table_name NOT IN ('_fmd_configs', '_fmd_documents', '_fmd_files')`)
   for (const r of tableRows) KIND[r.table_name] = 'list'
 
   // [API] external sources have no table -- they live in _fmd_configs as `api:<source>`.

@@ -277,6 +277,42 @@ select.cell-input option { background: var(--panel); color: var(--text); }
 .num-prefix { color: var(--muted); font-size: 13px; }
 .bool-input { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
 .bool-input input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+
+/* [File]/[Files] upload + view */
+.file-input { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.file-hidden { display: none; }
+.file-chips, .file-view { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.file-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; }
+.file-thumb { width: 42px; height: 42px; object-fit: cover; border-radius: 7px; border: 1px solid var(--line); display: block; background: var(--bg); }
+.file-name, .file-link { color: var(--accent-2); font-size: 12px; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 170px; }
+.file-name:hover, .file-link:hover { text-decoration: underline; }
+.file-remove { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 16px; line-height: 1; padding: 0 3px; border-radius: 4px; }
+.file-remove:hover { color: #ff7a7a; background: #ff7a7a1a; }
+.file-pick { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px; font-size: 13px; cursor: pointer; }
+.file-pick:hover { border-color: var(--accent); }
+.file-pick:disabled { opacity: .6; cursor: default; }
+.file-error { color: #ff8a8a; font-size: 12px; flex-basis: 100%; }
+.file-empty { color: var(--muted); }
+/* view: cards (default) vs list, with a small toggle when there are several */
+.file-view { display: inline-flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.file-toggle { display: inline-flex; gap: 0; align-self: flex-end; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.file-toggle button { background: var(--panel-2); color: var(--muted); border: 0; padding: 2px 8px; font-size: 12px; cursor: pointer; }
+.file-toggle button.active { background: var(--accent); color: var(--btn-text, #07131f); }
+.file-list { display: flex; flex-direction: column; gap: 4px; }
+.file-row { display: inline-flex; align-items: center; gap: 8px; }
+.file-row-thumb { width: 22px; height: 22px; object-fit: cover; border-radius: 4px; border: 1px solid var(--line); }
+.file-row-icon { font-size: 15px; }
+.file-row-name { color: var(--text); font-size: 13px; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
+.file-row-name:hover { text-decoration: underline; }
+.file-row-dl { color: var(--accent); text-decoration: none; font-weight: 700; padding: 0 4px; }
+/* the name/link/download are <button>s (they fetch through apiFetch) — reset to look like links */
+.file-name, .file-link, .file-row-name, .file-row-dl { background: none; border: 0; cursor: pointer; font: inherit; text-align: left; }
+.file-name, .file-link { font-size: 12px; }
+.file-row-name { font-size: 13px; }
+/* blob thumbnails: shimmer while loading, a lock box if access is denied */
+.file-loading { display: inline-block; background: linear-gradient(90deg, var(--panel-2), var(--line), var(--panel-2)); background-size: 200% 100%; animation: file-shimmer 1.2s ease-in-out infinite; }
+.file-broken { display: inline-flex; align-items: center; justify-content: center; background: var(--bg); color: var(--muted); font-size: 15px; }
+@keyframes file-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 .modal-backdrop {
   position: fixed; inset: 0; background: rgba(0,0,0,.55);
   display: flex; align-items: center; justify-content: center; z-index: 50;
@@ -693,6 +729,24 @@ table td.muted-cell { padding: 22px 10px; opacity: .8; text-align: center; }
   border-bottom-color: transparent; border-left-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
+
+/* [SideMenu hamburger]: the rail is hidden and pops out from the left as a
+   drawer via a ☰ button, so the content gets full width by default. */
+.fmd-display.has-side-menu.is-collapsible { flex-direction: column; position: relative; }
+.side-topbar { display: flex; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.side-hamburger {
+  background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+  border-radius: 8px; padding: 5px 11px; font-size: 16px; line-height: 1; cursor: pointer;
+}
+.side-hamburger:hover { border-color: var(--accent); }
+.side-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,.4); z-index: 5; }
+.is-collapsible .fmd-side-rail.side-rail-pop {
+  position: absolute; top: 0; bottom: 0; left: 0; z-index: 6; width: 208px;
+  transform: translateX(-100%); transition: transform .2s ease;
+  box-shadow: 12px 0 40px rgba(0,0,0,.5); overflow-y: auto;
+}
+.is-collapsible .fmd-side-rail.side-rail-pop.open { transform: translateX(0); }
+.is-collapsible .fmd-page-content { flex: 1 1 auto; min-width: 0; }
 
 .fmd-main { display: flex; flex-direction: column; gap: 18px; padding: 24px 26px; }
 

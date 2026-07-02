@@ -182,6 +182,16 @@ automatically.
 [SideMenu] Dashboard, Orders, Settings
 ```
 
+By default the rail is **static** (always visible). Add a **`hamburger`** flag to
+hide it behind a ☰ button that pops it out as a drawer (giving the content full
+width) — clicking a page navigates and closes it. `static` is also accepted to be
+explicit.
+
+```
+[SideMenu hamburger] Dashboard, Orders, Settings
+[SideMenu static] Dashboard, Orders, Settings
+```
+
 **Recognized structural tags**
 
 | Tag | Meaning |
@@ -580,6 +590,15 @@ opens. Pair with `r` to lock it. The value is either a token or a quoted literal
 Tokens: `CurrentUser`, `Today`, `Now`. Anything in `"quotes"` (or a bare word) is
 a literal. Auto-filled values are submitted like any other field.
 
+**File fields — `(allowed types)`.** A `file`/`files` field (§10) renders as an
+upload picker with thumbnail previews. Add an allowed-types list right after the
+field to restrict what can be picked — `img` (any image), `pdf`, or bare
+extensions like `png`, `docx`, `csv`; omit it to allow anything:
+
+```
+[Fields] Title, Attachment (img, pdf), Photos (img)
+```
+
 **Field widths — a leading `1`/`2`/`3`.** Prefix a field with a digit to set how
 many columns it spans in a **3-wide grid**: `1` = a third, `2` = two-thirds, `3`
 (or no digit) = full width. It combines with `!` (required) and `r` (read-only)
@@ -768,6 +787,8 @@ type; the rest is the field's display name.
 | `drop` | dropdown | `dropCategory` → **Category** | text (+ option list) |
 | `link` | relationship | `linkVendor` → **Vendor** | text (+ linked entity) |
 | `msel` | multi-select | `mselTags` → **Tags** | text (+ option list) |
+| `file` | a single file upload | `fileResume` → **Resume** | json descriptor |
+| `files` | several file uploads | `filesPhotos` → **Photos** | json descriptor list |
 
 **Multi-word field names:** only the **first** word needs the prefix —
 `txtRelated Vendor` → the single field **"Related Vendor"**. Prefixing every word
@@ -785,6 +806,61 @@ You store the raw value; the UI formats/edits it by type. In **read contexts** �
 `[Detail]`, `[Cases]`, and `[View]` — a `bool` renders as a colored **Yes/No
 pill** (green/grey) rather than a checkbox.
 (Editable cells show the formatted value and reveal the raw value when clicked.)
+
+### File uploads — `file` / `files` fields
+
+Two more prefixes let a record carry **uploaded files** — a résumé, a photo, a
+signed PDF. `file` holds **one** file; `files` holds **several**. Declare them in
+`[Data]` exactly like any other field:
+
+```
+[List Docs] txtTitle, fileAttachment, filesPhotos
+```
+
+**Use it in a form.** Reference the field by its plain display name (the FMD
+convention — `Attachment`, not `fileAttachment`; a prefixed name works too), and
+add an optional **`(allowed types)`** list right after it to restrict the picker:
+
+```
+[Form -> Docs] Add Doc
+    [Fields] Title, Attachment (img, pdf), Photos (img)
+```
+
+- The `(…)` list restricts the file picker **and** validates the choice. It
+  accepts `img` (any image), `pdf`, or bare extensions like `png`, `jpg`,
+  `docx`, `csv`. **Omit it to allow any type.**
+- This is the same field the read views (`[Table]`, `[Cases]`, `[Detail]`,
+  `[View]`) render — see below.
+
+**Upload.** The input is a picker with **live thumbnail previews** (images) or
+**named links** (PDF/other). A `file` field shows **Replace**; a `files` field
+shows **+ Add file** so you can stack several. Each attached file has a remove
+(×).
+
+**View (read contexts — `[Table]`, `[Cases]`, `[Detail]`, `[View]`).** Files
+render as image thumbnails plus clickable names. When a `files` field holds **2+
+files**, a small viewer toggle switches between **cards** (a thumbnail grid, the
+default) and a **list** (rows with name + download). *(In table cells the toggle
+is hidden to save space.)*
+
+**Download.** Every file is a link — images open inline, PDFs and other types
+download.
+
+**Under the hood — a few honest notes:**
+
+- Files are stored **server-side in Postgres**; the record itself only holds a
+  small `{id, name, mime}` descriptor.
+- Uploading requires **sign-in** on a deployed app (anonymous upload is blocked).
+  The editor author can upload while building.
+- **Downloads are permission-checked.** Each file remembers the entity it was
+  uploaded under, and a download re-checks the viewer's **read** permission on
+  that source — the *same* check the source's records use. So a document is
+  exactly as accessible as the record it belongs to: give `read` on the source
+  to the roles who may see its files. (Because a browser can't send an auth
+  header on an `<img>`, files are fetched through the authenticated app, not a
+  bare URL.) A file uploaded outside a form — with no owning source — stays an
+  unguessable capability link.
+- **Limits:** ~25 MB per file. Best for images, PDFs, and documents.
 
 ### Computed fields — `[Calc]`
 
@@ -1257,8 +1333,16 @@ ROLES & PERMISSIONS
 FIELD TYPE PREFIXES
   txt text · memo multi-line · num number · cur currency · bool boolean · date date
   drop dropdown · link relationship · msel multi-select
-  full set: txt | memo | num | cur | bool | date | drop | link | msel
+  file one uploaded file · files several uploaded files
+  full set: txt | memo | num | cur | bool | date | drop | link | msel | file | files
   multi-word: "txtRelated Vendor" -> "Related Vendor"
+
+FILE UPLOADS (file = one, files = several; declared in [Data])
+  [List Docs] txtTitle, fileAttachment, filesPhotos
+  [Fields] Attachment (img, pdf)     form input; (types) restricts + validates
+                                     types: img | pdf | png/jpg/docx/csv…; omit = any
+  read views show thumbnails + links; files 2+ toggles cards/list; ~25 MB/file
+  stored server-side in Postgres; upload needs sign-in on a deployed app
 
 OPTIONS (a line under the entity, configuring a drop/link field)
   (Category) Venue, Catering, Flowers        static dropdown choices

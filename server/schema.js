@@ -68,7 +68,7 @@ export function registerSchemaRoutes(app) {
         const { rows } = await client.query(
           `SELECT table_name FROM information_schema.tables
            WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
-             AND table_name NOT IN ('_fmd_configs', '_fmd_documents')`)
+             AND table_name NOT IN ('_fmd_configs', '_fmd_documents', '_fmd_files')`)
         for (const r of rows) await client.query(`DROP TABLE IF EXISTS ${q(r.table_name)} CASCADE`)
         await client.query(`DELETE FROM _fmd_documents`)
       }
@@ -79,7 +79,7 @@ export function registerSchemaRoutes(app) {
       const { rows: tableRows } = await client.query(
         `SELECT table_name FROM information_schema.tables
          WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
-           AND table_name NOT IN ('_fmd_configs', '_fmd_documents')`)
+           AND table_name NOT IN ('_fmd_configs', '_fmd_documents', '_fmd_files')`)
       const currentTables = new Set(tableRows.map((r) => r.table_name))
       const { rows: collRows } = await client.query(`SELECT DISTINCT collection FROM _fmd_documents`)
       const currentCollections = new Set(collRows.map((r) => r.collection))

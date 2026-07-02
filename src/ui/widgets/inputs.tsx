@@ -4,6 +4,7 @@ import { passes } from '../../fmd/rules'
 import { formatValue, toMoney, toDateInput, fieldDef } from '../../fmd/format'
 import { Field, FieldOptions, FmdRecord } from '../../fmd/types'
 import { apiFetch, dataBase } from '../../state/auth'
+import { FileInput } from './fileInput'
 
 // A controlled input that matches the field's declared type (used by forms and
 // the table's new-row): dropdown, relationship picker, date picker, $ number, text.
@@ -13,10 +14,14 @@ type TypedInputProps = {
   onChange: (v: unknown) => void
   placeholder?: string
   onEnter?: () => void
+  accept?: string[] | null // allowed file types for a [File]/[Files] field
+  source?: string | null // owning entity, recorded on file upload for access control
 }
-export function TypedInput({ def, value, onChange, placeholder, onEnter }: TypedInputProps) {
+export function TypedInput({ def, value, onChange, placeholder, onEnter, accept, source }: TypedInputProps) {
   const type = def?.type
   const key = (e: React.KeyboardEvent<HTMLInputElement>) => { if (e.key === 'Enter' && onEnter) onEnter() }
+  if (type === 'file') return <FileInput value={value} onChange={onChange} accept={accept} source={source} />
+  if (type === 'files') return <FileInput value={value} onChange={onChange} accept={accept} source={source} multiple />
   if (type === 'drop') return <PlainSelect value={value} options={def.options?.values || []} onChange={onChange} />
   if (type === 'msel') return <MultiSelect value={value} options={def.options?.values || []} onChange={onChange} />
   if (type === 'link') return <LinkPlain value={value} link={def.options} onChange={onChange} />
@@ -91,13 +96,15 @@ export function BoolInput({ value, onChange }: BoolInputProps) {
 
 // Notion-style inline cell: shows the formatted value; click/focus to edit the
 // raw value; commits on blur/Enter, cancels on Escape.
-type EditableCellProps = { value: unknown; field?: Field; onCommit: (v: unknown) => void }
-export function EditableCell({ value, field, onCommit }: EditableCellProps) {
+type EditableCellProps = { value: unknown; field?: Field; onCommit: (v: unknown) => void; source?: string | null }
+export function EditableCell({ value, field, onCommit, source }: EditableCellProps) {
   const [editing, setEditing] = useState(false)
   const [v, setV] = useState<unknown>(value ?? '')
   useEffect(() => setV(value ?? ''), [value])
   const type = field?.type
   if (type === 'boolean') return <BoolInput value={value} onChange={onCommit} />
+  if (type === 'file') return <FileInput value={value} onChange={onCommit} source={source} />
+  if (type === 'files') return <FileInput value={value} onChange={onCommit} source={source} multiple />
   if (type === 'msel') return <MultiSelect value={value} options={field?.options?.values || []} onChange={onCommit} />
   if (!editing) {
     return (
@@ -196,7 +203,7 @@ export function NewRow({ source, cols, fields, extraCol, extraActionCol, onAdded
     <tr className="new-row">
       {cols.map((c, ci) => (
         <td key={ci} data-label={c.name}>
-          <NewCell field={fieldDef(fields, c.key)} first={ci === 0}
+          <NewCell field={fieldDef(fields, c.key)} first={ci === 0} source={source}
             value={vals[c.key] || ''}
             onChange={(val) => setVals((s) => ({ ...s, [c.key]: val }))}
             onEnter={add} />
@@ -214,10 +221,11 @@ type NewCellProps = {
   first: boolean
   onChange: (v: unknown) => void
   onEnter: () => void
+  source?: string | null
 }
-export function NewCell({ field, value, first, onChange, onEnter }: NewCellProps) {
+export function NewCell({ field, value, first, onChange, onEnter, source }: NewCellProps) {
   if (field?.calc || field?.rollup || field?.lookup) return <span className="muted-cell">auto</span> // computed, not entered
-  return <TypedInput def={field} value={value} placeholder={first ? '+ new…' : ''} onChange={onChange} onEnter={onEnter} />
+  return <TypedInput def={field} value={value} placeholder={first ? '+ new…' : ''} onChange={onChange} onEnter={onEnter} source={source} />
 }
 
 // Controlled <select> for the new-row (value lives in the parent's state).

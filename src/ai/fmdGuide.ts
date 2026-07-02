@@ -30,25 +30,24 @@ Example output when files are present:
 [Rule] Name (condition)   a named, reusable condition
 [Action] Name             a sequence of write-steps a button can run
 
-# THEMING — [Style] with a [Size] and a [Colors] sub-block (set only what you want):
+# THEMING — [Style] with a [Size] and a [Colors] sub-block (six canonical keys — set only what you want):
 [Style]
-  [Size] Full             # Compact (~760px) | Standard (~1100px, default) | Full (edge-to-edge)
+  [Size] Full             # Compact (~760px) | Standard (~1100px, default) | Full (edge-to-edge). (Wide is a [Form] modal size only, NOT valid here)
   [Font] Poppins          # System/Sans/Serif/Mono (built-in) OR any Google Font name (Inter, Roboto, Lato…) auto-loaded
   [Colors]
-    [Primary] #ff5a5f     # accent: buttons/active tabs/links. # is OK here (not a comment); bare hex or a CSS name (White) also work
+    [Background] #0d1117  # app page background. # is OK here (not a comment); bare hex or a CSS name (White) also work
+    [Foreground] #161b22  # panels/tables/menus AND ( ) card interiors
+    [Text] #e6edf3        # body text (auto-derives muted + heading colors)
+    [Lines] #30363d       # borders/dividers
+    [Primary] #ff5a5f     # buttons/active tabs/links (auto-derives readable button-text contrast)
     [Secondary] #38d9c4   # secondary accents
-    [Background] #0d1117  # app page background
-    [Surface] #161b22     # panels/tables/menus AND ( ) card interiors. [Card] #.. sets only the ( ) card interior
-    [Text] #e6edf3        # primary body text
-    [Heading] #ffffff     # prominent labels: app name, titles, KPI values
-    [Muted] #8b949e       # subtle text (field labels, table headers)
-    [ButtonText] #07131f  # text ON buttons (buttons sit on [Primary])
-    [Border] #30363d      # borders/dividers
+# Old finer keys still work as aliases: [Surface]=Foreground, [Card] (card interior only), [Muted], [Heading], [ButtonText], [Border]=Lines.
 
 # A PAGE
 [Display] Dashboard
   [Title] Dashboard
   [Top Menu Bar] Dashboard, Orders, Customers     # one label per [Display] page
+  # [SideMenu] A, B, C  (aliases [Sidebar]/[Side Menu]) — same as [Top Menu Bar] but a vertical left rail. Flag: [SideMenu static] (default, always shown) or [SideMenu hamburger] (hidden behind a ☰ pop-out drawer)
   [Main]
     ((Today)                                       # "((" opens a row of cards
        [Counter -> Orders] Status
@@ -65,17 +64,18 @@ Example output when files are present:
 [Slider -> S] Label Spent / Cap           + [Slide] Label / [Slides] A, B
 [Board -> S] GroupField                   kanban grouped by a field
 [Calendar -> S] DateField
+[Chart -> S] Label / Value                sums Value by Label; + [Kind] bar|line|pie|donut (default bar), optional [Sort]
 [Detail -> S] colA, colB                  one record (picker) + nested views; nested filter uses this / this.Field
 [Cases -> S] colA, colB                   a TABLE whose FIRST column links to that record's "case" — a drill-in page of the indented children (with this bound to the record), exited via Back. Put anything a [Display] has under it.
   [View -> FormName] Heading              read-only render of a [Form]'s fields for the current case record (no inputs/buttons)
   (Table -> Other ? Link == this)         nested views filter to the case via this / this.Field
 [[FieldName]]                             inside a case, [[Field]] in any [Title]/[Text]/label text inlines that field's value (e.g. [Title] [[Name]]'s case)
 [Text] words                              a text line (supports **bold**, *italic*, and [[Field]] in a case). A plain unbracketed line is also text.
-Indented under a [Table]: [Sort] Field desc · [Group] Field · [Foot] sum Amount, count
+Indented under a [Table]: [Sort] Field desc · [Group] Field · [Foot] sum Amount, count · [Search] (optional placeholder) viewer search box across all columns · [Filter] Field viewer dropdown of that column's distinct values · [RowButton -> ActionName] Label (alias [RowAction]) per-row button running that [Action] with the row as this (Approve/Archive per row)
 
 # DATA MODEL (inside [Data])
-[List Name] txtName, memoNotes, numQty, curPrice, boolDone, dateDue, dropStatus, linkCustomer, mselTags
-   field PREFIX sets the type: txt one-line text · memo large/multi-line text (textarea — use for descriptions/notes) · num number · cur currency · bool boolean · date date · drop dropdown · link relationship · msel multi-select
+[List Name] txtName, memoNotes, numQty, curPrice, boolDone, dateDue, dropStatus, linkCustomer, mselTags, fileScan, filesPhotos
+   field PREFIX sets the type: txt one-line text · memo large/multi-line text (textarea — use for descriptions/notes) · num number · cur currency · bool boolean · date date · drop dropdown · link relationship · msel multi-select · file one uploaded file · files several uploaded files
    multi-word field: "txtFull Name" -> field "Full Name"
 [Store Name] field, field          schemaless JSON collection (variable-shape data)
 Option lines (indented under the entity) configure a drop/link field:
@@ -90,6 +90,7 @@ Option lines (indented under the entity) configure a drop/link field:
 # FORMS, BUTTONS, ACTIONS
 [Form -> Orders] New Order
   [Fields] !Customer, Date, Total        "!" = required
+  [Fields] Title, Attachment (img, pdf), Photos (img)   # optional (types) after a file/files field restricts uploads (img/pdf or bare extensions)
   [Field "Ship To"] Address              custom label; [Field "L" (cond)] f = show-if
   [Field] rOrderNo                       lowercase "r" prefix = READ-ONLY (not editable); combines with "!"
   [Field -> CurrentUser] rTakenBy        AUTO-FILL when the form opens. Tokens: CurrentUser, Today, Now; or a "literal" / 'literal'

@@ -6,13 +6,17 @@ import type { Field, FieldType } from '../types'
 // Field type prefixes in [Data]: `txtTime`, `numCount`, `curPrice`, `boolStatus`,
 // `dateDeadline`. The prefix declares the type; the rest is the display name. A
 // multi-word name prefixes each word: `txtRelated txtVendor` -> "Related Vendor".
-const TYPE_PREFIX_RE = /^(txt|memo|num|cur|bool|date|drop|link|msel)([A-Z].*)$/
+// `files` before `file` so `filesPhotos` reads as the plural (the trailing
+// `[A-Z]` anchor already disambiguates, but ordering keeps it obvious).
+const TYPE_PREFIX_RE = /^(txt|memo|num|cur|bool|date|drop|link|msel|files|file)([A-Z].*)$/
 const PREFIX_TYPE: Record<string, FieldType> = {
   txt: 'text', num: 'number', cur: 'currency', bool: 'boolean', date: 'date',
   memo: 'memo',   // large/multi-line text -> renders a textarea
   drop: 'drop',   // dropdown with a fixed list of options
   link: 'link',   // relationship: options come from another entity
   msel: 'msel',   // multi-select: choose several from a fixed list
+  file: 'file',   // a single uploaded file (image/pdf/…)
+  files: 'files', // several uploaded files
 }
 
 function cleanWord(w: string): { word: string; type: FieldType | null } {

@@ -9,6 +9,7 @@ import { parseAggregate, splitEntityField, aggregate } from '../../fmd/expr'
 import { evalExpr } from '../../fmd/calc'
 import { formatValue, fieldDef, fieldType } from '../../fmd/format'
 import { EditableCell, NewRow } from './inputs'
+import { FileView } from './fileInput'
 import { classify, Checklist, Empty } from './shared'
 import { FormButton, spanOf } from './forms'
 import { apiFetch, dataBase } from '../../state/auth'
@@ -291,8 +292,10 @@ function VizTable({ node }: { node: VizNode }): React.ReactNode {
                 : def?.calc
                   ? <CellText>{formatValue(evalExpr(def.calc, r), def.type)}</CellText>
                   : canUpdate && r._id != null
-                    ? <EditableCell value={r[c.key]} field={def} onCommit={(v) => patch(r, c.key, v)} />
-                    : <CellText>{formatValue(r[c.key], fieldType(fields, c.key))}</CellText>}
+                    ? <EditableCell value={r[c.key]} field={def} source={node.source} onCommit={(v) => patch(r, c.key, v)} />
+                    : def?.type === 'file' || def?.type === 'files'
+                      ? <FileView value={r[c.key]} toggle={false} />
+                      : <CellText>{formatValue(r[c.key], fieldType(fields, c.key))}</CellText>}
           </td>
         )
       })}
@@ -521,6 +524,8 @@ function DetailValue({ record, def, fields, source }: DetailValueProps): React.R
   if (def?.lookup) return <LookupCell row={record} def={def} fields={fields} />
   if (def?.calc) return <>{formatValue(evalExpr(def.calc, record), def.type)}</>
   const raw = record?.[def?.name as string]
+  // [File]/[Files] -> image thumbnails + named links.
+  if (def?.type === 'file' || def?.type === 'files') return <FileView value={raw} />
   // A boolean (declared, or a real true/false value) reads better as a status
   // pill than the bare word "true"/"false".
   if (def?.type === 'boolean' || typeof raw === 'boolean') {

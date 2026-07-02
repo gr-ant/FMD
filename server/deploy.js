@@ -39,7 +39,7 @@ async function applyEntities(client, schema, entities) {
   const { rows: tRows } = await client.query(
     `SELECT table_name FROM information_schema.tables
      WHERE table_schema = $1 AND table_type = 'BASE TABLE'
-       AND table_name NOT IN ('_fmd_configs', '_fmd_documents')`, [schema])
+       AND table_name NOT IN ('_fmd_configs', '_fmd_documents', '_fmd_files')`, [schema])
   const currentTables = new Set(tRows.map((r) => r.table_name))
   for (const t of currentTables) {
     const d = desired.get(t)
@@ -152,7 +152,7 @@ export function registerDeployRoutes(app) {
         const { rows: tRows } = await pool.query(
           `SELECT table_name FROM information_schema.tables
            WHERE table_schema = $1 AND table_type = 'BASE TABLE'
-             AND table_name NOT IN ('_fmd_documents', '_fmd_configs')
+             AND table_name NOT IN ('_fmd_documents', '_fmd_configs', '_fmd_files')
            ORDER BY table_name`, [sch])
         const tables = []
         for (const { table_name: t } of tRows) {

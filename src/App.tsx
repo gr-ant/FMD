@@ -626,7 +626,7 @@ export default function App() {
                 <CasePage caseView={openCase} onBack={() => setOpenCase(null)} />
               ) : pages.length > 0 ? (
                 <>
-                  <PageView page={activePage} activeName={activeName} menuItems={menuItems} onSelect={setPage} side={menuNode?.side} />
+                  <PageView page={activePage} activeName={activeName} menuItems={menuItems} onSelect={setPage} side={menuNode?.side} collapsible={menuNode?.collapsible} />
                   {extras.map((n, i) => <Renderer key={`x${i}`} node={n} />)}
                 </>
               ) : (

@@ -7,6 +7,14 @@ const dateFmt = new Intl.DateTimeFormat('en-US', { year: 'numeric', month: 'shor
 export function formatValue(value: unknown, type?: FieldType): string {
   if (value === undefined || value === null || value === '') return '—'
   if (type === 'boolean') return (value === true || value === 'true' || value === 't' || value === 1 || value === '1') ? 'Yes' : 'No'
+  if (type === 'file' || type === 'files') {
+    // value is a {name} descriptor or an array of them — show the file name(s).
+    try {
+      const p = typeof value === 'string' ? JSON.parse(value) : value
+      const names = (Array.isArray(p) ? p : [p]).map((f) => f?.name).filter(Boolean)
+      return names.length ? names.join(', ') : '—'
+    } catch { return '—' }
+  }
   if (type === 'currency') {
     const n = Number(String(value).replace(/[^0-9.-]/g, ''))
     return Number.isFinite(n) ? currencyFmt.format(n) : String(value)

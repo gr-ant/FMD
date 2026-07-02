@@ -134,6 +134,30 @@ export function parseFieldMarkers(raw: string): { field: string; required: boole
   return { field: s, required, readonly, width }
 }
 
+// Split a [Fields] list at top-level commas, leaving commas inside a `(img, pdf)`
+// accept list (or "quotes") alone.
+function splitFieldsTop(str: string): string[] {
+  const out: string[] = []
+  let buf = '', depth = 0, inQ = false
+  for (const ch of String(str)) {
+    if (ch === '"') inQ = !inQ
+    else if (!inQ && ch === '(') depth++
+    else if (!inQ && ch === ')') depth = Math.max(0, depth - 1)
+    if (ch === ',' && !inQ && depth === 0) { out.push(buf); buf = '' } else buf += ch
+  }
+  if (buf.trim()) out.push(buf)
+  return out
+}
+
+// Pull a trailing `(img, pdf)` accept list off a field token (for [File]/[Files]
+// fields): `fileReceipt (pdf, img)` -> base `fileReceipt`, accept `['pdf','img']`.
+function extractAccept(tok: string): { base: string; accept: string[] | null } {
+  const m = tok.match(/\(([^)]*)\)\s*$/)
+  if (!m) return { base: tok.trim(), accept: null }
+  const accept = m[1].split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
+  return { base: tok.slice(0, m.index).trim(), accept: accept.length ? accept : null }
+}
+
 // Parse a `{Role, !Role}` role-visibility block: bare names are an allow-list,
 // `!name` excludes. If only exclusions are present, everyone else is allowed.
 export function parseRoleVisibility(inner: string): RoleVisibility {
@@ -236,12 +260,14 @@ function parseNodeInner(line: string): Node {
     // Navigation between [Display] pages. `[Top Menu Bar]`/`[Menu]`/`[Nav]` render
     // a horizontal tab bar; `[SideMenu]`/`[Side Menu]`/`[Sidebar]` render a vertical
     // rail down the left of the page. Both take a comma-separated list of pages.
-    if (lowerInner === 'top menu bar' || lowerInner === 'side menu'
-      || first === 'topmenu' || first === 'menu' || first === 'nav'
-      || first === 'sidemenu' || first === 'sidebar') {
+    // A side menu may carry a flag: `[SideMenu static]` (always shown, the default)
+    // or `[SideMenu hamburger]` (collapsed behind a ☰ button that pops it out).
+    const isSide = first === 'sidemenu' || first === 'sidebar' || lowerInner.startsWith('side menu')
+    if (isSide || lowerInner === 'top menu bar' || first === 'topmenu' || first === 'menu' || first === 'nav') {
       const items = content.split(',').map((s) => s.trim()).filter(Boolean)
-      const side = lowerInner === 'side menu' || first === 'sidemenu' || first === 'sidebar'
-      return { type: 'Menu', items, side, children: [] }
+      const flags = lowerInner.split(/\s+/)
+      const collapsible = isSide && ['hamburger', 'collapse', 'collapsible', 'popout', 'pop'].some((f) => flags.includes(f))
+      return { type: 'Menu', items, side: isSide, ...(collapsible ? { collapsible: true } : {}), children: [] }
     }
     // A visualization bound to a source: [Table -> Schedule], [Counter -> ...] etc.
     // A leading CRUD prefix (cudTable) makes the table interactive. A trailing
@@ -354,14 +380,16 @@ function parseNodeInner(line: string): Node {
       const qm = inner.match(/"([^"]*)"/)
       const cm = inner.match(/\(([^)]*)\)/)
       const showIf = cm && cm[1].trim() ? cm[1].trim() : null
-      const { field, required, readonly, width } = parseFieldMarkers(content)
+      const { base, accept } = extractAccept(content) // trailing (img, pdf) for a [File] field
+      const { field, required, readonly, width } = parseFieldMarkers(base)
       const autofill = innerSource ? innerSource.trim() : null
-      return { type: 'FormField', entries: [{ field, label: qm ? qm[1] : field, required, showIf, readonly, autofill, width }], children: [] }
+      return { type: 'FormField', entries: [{ field, label: qm ? qm[1] : field, required, showIf, readonly, autofill, width, accept }], children: [] }
     }
     if (first === 'fields') {
-      const entries = content.split(',').map((s) => s.trim()).filter(Boolean).map((tok) => {
-        const { field, required, readonly, width } = parseFieldMarkers(tok)
-        return { field, label: field, required, showIf: null as string | null, readonly, autofill: null as string | null, width }
+      const entries = splitFieldsTop(content).map((s) => s.trim()).filter(Boolean).map((tok) => {
+        const { base, accept } = extractAccept(tok)
+        const { field, required, readonly, width } = parseFieldMarkers(base)
+        return { field, label: field, required, showIf: null as string | null, readonly, autofill: null as string | null, width, accept }
       })
       return { type: 'FormField', entries, children: [] }
     }

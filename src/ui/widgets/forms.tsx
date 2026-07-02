@@ -19,6 +19,7 @@ type FormField = {
   readonly: boolean
   autofill: string | null
   width: number | null // 1–3 columns of a 3-wide grid; null = full width
+  accept: string[] | null // allowed file types for a [File]/[Files] field
 }
 
 // Resolve a `[Field -> X]` auto-fill spec to a concrete value when a form opens:
@@ -98,7 +99,9 @@ export function FormModal({ form, onClose }: { form: FormDef; onClose: () => voi
     const missing = visible.filter((f) => f.required && !String(vals[f.field] ?? '').trim())
     if (missing.length) { setErr(`Required: ${missing.map((f) => f.label).join(', ')}`); return }
     const body: FmdRecord = {}
-    visible.forEach((f) => { if (vals[f.field] != null && vals[f.field] !== '') body[f.field] = vals[f.field] })
+    // Key by the plain column name (strip any type prefix, e.g. fileAttachment ->
+    // Attachment) so the value lands in the right column.
+    visible.forEach((f) => { if (vals[f.field] != null && vals[f.field] !== '') body[fieldName(f.field)] = vals[f.field] })
     apiFetch(dataBase(base, form.source), {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     }).then(() => { refresh(); onClose() })
@@ -119,7 +122,7 @@ export function FormModal({ form, onClose }: { form: FormDef; onClose: () => voi
                   <span className="form-label">{f.label}{f.required && <span className="req">*</span>}</span>
                   {f.readonly
                     ? <div className="form-input form-readonly" aria-readonly="true">{String(vals[f.field] ?? '') || '—'}</div>
-                    : <TypedInput def={def} value={vals[f.field] || ''} onChange={(v) => setVals((s) => ({ ...s, [f.field]: v }))} />}
+                    : <TypedInput def={def} value={vals[f.field] || ''} accept={f.accept} source={form.source} onChange={(v) => setVals((s) => ({ ...s, [f.field]: v }))} />}
                 </label>
               )
             })}

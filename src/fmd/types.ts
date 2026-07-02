@@ -17,6 +17,8 @@ export type FieldType =
   | 'drop'
   | 'link'
   | 'msel'
+  | 'file'   // a single uploaded file (image/pdf/…) stored as a {id,name,mime} descriptor
+  | 'files'  // several uploaded files, stored as an array of descriptors
 
 // A runtime record from a source. Loose by design (columns vary per entity),
 // with the synthetic primary key the CRUD API assigns.
@@ -115,6 +117,7 @@ export interface MenuNode extends BaseNode {
   type: 'Menu'
   items: string[]
   side?: boolean // [SideMenu]/[Sidebar] -> a vertical rail instead of a top tab bar
+  collapsible?: boolean // [SideMenu hamburger] -> hidden behind a ☰ toggle (else static)
 }
 
 // Legacy widget row: one or more (Name -> source) groups on a line.
@@ -220,6 +223,9 @@ export interface FormFieldNode extends BaseNode {
     autofill: string | null
     // Layout width in a 3-column grid: 1, 2, or 3 (full). null = full width.
     width: number | null
+    // Allowed file types for a [File]/[Files] field, from a trailing `(img, pdf)`
+    // list on the field token. Shorthands (img/pdf/…) + bare extensions. null = any.
+    accept: string[] | null
   }[]
 }
 

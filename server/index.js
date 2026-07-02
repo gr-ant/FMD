@@ -20,12 +20,14 @@ import { registerDeployRoutes } from './deploy.js'
 import { registerUserRoutes } from './users.js'
 import { registerCrudRoutes } from './crud.js'
 import { registerExtRoutes } from './ext.js'
+import { registerFileRoutes } from './files.js'
 import { registerTriggerRoutes, startTriggerSweep } from './triggers.js'
 
 const PORT = process.env.PORT || 4000
 
 const app = express()
-app.use(express.json())
+// Raised limit so base64 file uploads ([File]/[Files] fields) fit in the JSON body.
+app.use(express.json({ limit: '35mb' }))
 app.use((req, res, next) => {
   res.set('Access-Control-Allow-Origin', '*') // dev convenience; proxy is same-origin
   next()
@@ -41,6 +43,7 @@ registerDeployRoutes(app)
 registerUserRoutes(app)
 registerTriggerRoutes(app) // _triggers/run — before the catch-all /api/:source
 registerExtRoutes(app) // _ext/* — external API data sources, before /api/:source
+registerFileRoutes(app) // _files/* — file upload/download, before /api/:source
 registerCrudRoutes(app)
 
 init()
