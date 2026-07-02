@@ -96,6 +96,11 @@ function PagesSection({ wiki }: { wiki: AppWiki }) {
           ))}. Here's how to use each:
         </p>
       )}
+      {wiki.navigation.length > 0 && (
+        <ul className="wiki-task-list wiki-nav-list">
+          {wiki.navigation.map((s, i) => <li key={i} className="wiki-task">{prose(s)}</li>)}
+        </ul>
+      )}
       {wiki.pages.map((pg) => (
         <div key={pg.name} className="wiki-page-block">
           <h3 className="wiki-h3">{pg.name}</h3>

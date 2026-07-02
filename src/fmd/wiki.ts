@@ -4,8 +4,12 @@
 // semantics or runtime data.
 // -----------------------------------------------------------------------
 
-import type { Node, RootNode, BlockNode, ActionStep, VizNode, ItemNode, FilterNode } from './types'
+import type { Node, RootNode, BlockNode, ActionStep, VizNode, ItemNode, FilterNode, MenuNode } from './types'
 import type { Schema } from './types'
+
+// Bracket tags that are pure structural containers (no user-facing prose of their
+// own); the guide recurses into them rather than describing them as content.
+const STRUCTURAL_TAGS = new Set(['main', 'display', 'title', 'section', 'row', 'col', 'group', 'data', 'style'])
 import { collectForms, collectActions, collectTriggers, collectRoles } from './parse/schema'
 import { fieldName } from '../parser'
 
@@ -130,6 +134,8 @@ export interface AppWiki {
   forms: WikiForm[]
   actions: WikiAction[]
   triggers: WikiTrigger[]
+  // How to get around the app (the top/side menu), in plain English.
+  navigation: string[]
   roles: string[]
   permMatrix: WikiPermEntry[]
   // Plain-English "who can do what" — one sentence per role. **bold** marks a role.
@@ -413,11 +419,7 @@ function buildPageGuide(
         case 'UserManagement':
           tasks.push('Manage people and their access here — invite users and set what each role can do.')
           break
-        case 'Menu':
-          if (c.items && c.items.length) {
-            tasks.push(`Use the ${c.side ? 'side menu' : 'top menu'} to move between pages: ${c.items.join(', ')}.`)
-          }
-          break
+        case 'Menu': break // navigation is described once, app-level (AppWiki.navigation)
         case 'Text':
           if (c.value && c.value.trim()) tasks.push(`The page shows a note: “${c.value.trim()}”.`)
           break
@@ -430,7 +432,15 @@ function buildPageGuide(
             tasks.push(`The **${c.name}** card.`)
           }
           break
-        default: recurse(c)
+        default:
+          // A generic labelled leaf ([Note] text, [Highlight] …) with content but
+          // no children — describe it so every element is covered.
+          if (c.type === 'Block' && c.value && c.value.trim() && !c.children.length
+            && !STRUCTURAL_TAGS.has(c.tag.toLowerCase())) {
+            tasks.push(`The page shows **${humanise(c.tag)}**: “${c.value.trim()}”.`)
+          } else {
+            recurse(c)
+          }
       }
     }
   }
@@ -489,6 +499,30 @@ function buildEntities(schema: Schema): WikiEntity[] {
 
     return { name: entity.name, source, kind: entity.kind, fields, gaps }
   })
+}
+
+// Describe how to move around the app: the top/side menu (found anywhere in the
+// tree), or a note when pages are just listed. App-level, so it's said once.
+function buildNavigation(root: RootNode, pageNames: string[]): string[] {
+  let menu: MenuNode | null = null
+  const find = (n: Node): void => {
+    if (menu) return
+    if (n.type === 'Menu') { menu = n; return }
+    for (const c of n.children) find(c)
+  }
+  root.children.forEach(find)
+  if (menu) {
+    const m: MenuNode = menu
+    const items = m.items && m.items.length ? m.items : pageNames
+    if (!items.length) return []
+    const where = m.side ? 'the side menu on the left' : 'the top menu bar'
+    const hint = m.collapsible ? ' (tap the ☰ button to open it)' : ''
+    return [`Use ${where}${hint} to move between pages: ${items.join(', ')}.`]
+  }
+  if (pageNames.length > 1) {
+    return [`Move between the app's pages — ${pageNames.join(', ')} — from the navigation.`]
+  }
+  return []
 }
 
 function buildPages(root: RootNode, schema: Schema, forms: WikiForm[], actions: WikiAction[]): WikiPage[] {
@@ -656,6 +690,7 @@ export function generateWiki(root: RootNode, schema: Schema): AppWiki {
   const actions = buildActions(root, schema)
   const pages = buildPages(root, schema, forms, actions)
   const triggers = buildTriggers(root, schema)
+  const navigation = buildNavigation(root, pages.map((p) => p.name))
   const permMatrix = buildPermMatrix(schema, roles)
   const permSummary = buildPermSummary(schema, roles)
 
@@ -664,7 +699,7 @@ export function generateWiki(root: RootNode, schema: Schema): AppWiki {
   if (!pages.length) topGaps.push('No [Display] pages found — add at least one to give the app a UI.')
   if (!Object.keys(schema).length) topGaps.push('No [Data] entities found — add a [Data] block to define the data model.')
 
-  return { appName, pages, entities, forms, actions, triggers, roles, permMatrix, permSummary, topGaps }
+  return { appName, pages, entities, forms, actions, triggers, navigation, roles, permMatrix, permSummary, topGaps }
 }
 
 // ---- Plain-text export (for offline testing) ----------------------------
@@ -709,6 +744,9 @@ export function wikiToMarkdown(wiki: AppWiki): string {
 
   // Using the app — the natural-language, task-oriented page guide.
   h2('Using the app')
+  if (wiki.pages.length) p(`This app has ${wiki.pages.length} ${wiki.pages.length === 1 ? 'page' : 'pages'}: ${wiki.pages.map((pg) => pg.name).join(', ')}.`)
+  wiki.navigation.forEach((s) => li(s))
+  if (wiki.navigation.length) lines.push('')
   for (const pg of wiki.pages) {
     h3(pg.name)
     pg.gaps.forEach(gap)

@@ -685,6 +685,7 @@ table td.muted-cell { padding: 22px 10px; opacity: .8; text-align: center; }
 .wiki-ui-name { color: var(--text); font-weight: 600; }
 .wiki-field-raw { color: var(--muted); font-size: 11px; font-family: 'SF Mono', 'Fira Code', Menlo, Consolas, monospace; }
 .wiki-narrative { line-height: 1.6; color: var(--text); margin: 6px 0 0; }
+.wiki-nav-list { margin: 0 0 14px; }
 .wiki-perm-detail-label { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 16px 0 6px; }
 .wiki-entity-head {
   display: flex;
