@@ -186,9 +186,11 @@ type NewRowProps = {
   // A trailing empty cell to align under a [RowButton] actions column, so the
   // create ("+") row keeps the same column count as the data rows.
   extraActionCol?: boolean
+  // A leading empty cell to align under a [BulkAction] checkbox column.
+  leadCol?: boolean
   onAdded: () => void
 }
-export function NewRow({ source, cols, fields, extraCol, extraActionCol, onAdded }: NewRowProps) {
+export function NewRow({ source, cols, fields, extraCol, extraActionCol, leadCol, onAdded }: NewRowProps) {
   const [vals, setVals] = useState<FmdRecord>({})
   const base = useApiBase()
   const add = () => {
@@ -201,6 +203,7 @@ export function NewRow({ source, cols, fields, extraCol, extraActionCol, onAdded
   }
   return (
     <tr className="new-row">
+      {leadCol && <td className="bulk-cell" />}
       {cols.map((c, ci) => (
         <td key={ci} data-label={c.name}>
           <NewCell field={fieldDef(fields, c.key)} first={ci === 0} source={source}

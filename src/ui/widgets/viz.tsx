@@ -1,6 +1,6 @@
 import React, { useContext, useState } from 'react'
 import Renderer from '../Renderer'
-import { useSource, keysOf, pickField, isNum, SchemaContext, RecordContext, useRefresh, useRules, useApiBase, useVisibilityRoles, useRecord, useFormsList, useCaseNav } from '../../data'
+import { useSource, keysOf, pickField, isNum, SchemaContext, RecordContext, useRefresh, useRules, useApiBase, useVisibilityRoles, useRecord, useFormsList, useCaseNav, useActions } from '../../data'
 import type { OpenCaseValue } from '../../state/contexts'
 import { fieldName, visibleForRoles } from '../../parser'
 import { widgetViz, parseFieldMarkers } from '../../fmd/parse/nodes'
@@ -15,6 +15,9 @@ import { classify, Checklist, Empty } from './shared'
 import { FormButton, spanOf } from './forms'
 import { filterRows, useFields, resolveField, type ResolvedField } from './vizShared'
 import { VizChart } from './vizChart'
+import { matchAction } from '../panels/helpers'
+import { executeAction, pokeTriggers } from '../runAction'
+import { useDialogs } from '../dialogs'
 import { apiFetch, dataBase } from '../../state/auth'
 import type {
   Node,
@@ -24,6 +27,8 @@ import type {
   CasesNode,
   ViewNode,
   RowButtonNode,
+  BulkActionNode,
+  ActionNode,
   FootNode,
   KindNode,
   SearchNode,
@@ -132,15 +137,21 @@ function CellText({ children }: { children: React.ReactNode }): React.ReactNode 
 // (cTable/uTable/dTable, any combination). Mutations hit the backend, then
 // refresh re-fetches the data so the table reflects the database.
 function VizTable({ node }: { node: VizNode }): React.ReactNode {
-  let rows = filterRows(useSource(node.source), node.filter, useRules())
+  const rules = useRules()
+  let rows = filterRows(useSource(node.source), node.filter, rules)
   const fields = useFields(node.source)
   const refresh = useRefresh()
   const base = useApiBase()
   const permits = usePermits(node.source) // all hooks BEFORE the `if (!rows)` guard
+  const { actions } = useActions() // for [BulkAction] buttons (matched by name/target)
+  const dialogs = useDialogs() // destructive bulk actions confirm before running
   // Viewer-facing [Search]/[Filter] controls narrow the rows client-side (before
   // the author's sort/group/foot passes). Their state lives here on the table.
   const [query, setQuery] = useState('')
   const [selections, setSelections] = useState<Record<string, string>>({})
+  // [BulkAction]: the set of checkbox-selected row _ids (as strings). All hooks
+  // stay above the `if (!rows)` guard to keep the hook order stable.
+  const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const searchNode = node.children.find((c): c is SearchNode => c.type === 'Search')
   const filterNodes = node.children.filter((c): c is FilterNode => c.type === 'Filter')
   if (!rows) return <Empty source={node.source} />
@@ -189,7 +200,38 @@ function VizTable({ node }: { node: VizNode }): React.ReactNode {
     ? node.children.filter((c): c is RowButtonNode => c.type === 'RowButton')
     : [] // only show row actions to a user with a write permit (else clicks 403 silently)
   const hasRowActions = rowButtons.length > 0
-  const span = cols.length + (canDelete ? 1 : 0) + (hasRowActions ? 1 : 0)
+  // Bulk actions ([BulkAction]/[BulkButton]) add a leading checkbox column and a
+  // toolbar (shown once ≥1 row is selected). Gated by a write permit, same as
+  // [RowButton]. Additive: with none, the table renders exactly as before.
+  const bulkActions = (permits.create || permits.update || permits.delete)
+    ? node.children.filter((c): c is BulkActionNode => c.type === 'BulkAction')
+    : []
+  const hasBulk = bulkActions.length > 0
+  const span = (hasBulk ? 1 : 0) + cols.length + (canDelete ? 1 : 0) + (hasRowActions ? 1 : 0)
+
+  // Toggle one row's checkbox (keyed by its _id, stringified).
+  const toggleRow = (id: string): void =>
+    setSelected((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n })
+
+  // Run a [BulkAction]'s [Action] once per selected record, each bound as `this`
+  // (reusing the action runtime). Destructive actions confirm first. On
+  // completion clear the selection, poke triggers, and refresh the table.
+  const runBulk = async (b: BulkActionNode): Promise<void> => {
+    const action = matchAction(actions as Record<string, ActionNode>, b)
+    if (!action) return
+    const chosen = rows.filter((r) => r._id != null && selected.has(String(r._id)))
+    if (!chosen.length) return
+    const steps = (action as unknown as { steps?: { op?: string }[] }).steps
+    if (steps?.some((s) => s.op === 'delete') && !(await dialogs.confirm({
+      danger: true, title: b.label,
+      message: `This runs “${b.label}” on ${chosen.length} selected record${chosen.length === 1 ? '' : 's'} and can’t be undone.`,
+      confirmLabel: b.label, cancelLabel: 'Cancel',
+    }))) return
+    for (const r of chosen) await executeAction(action, { rules, base, record: r, source: node.source })
+    await pokeTriggers(base)
+    setSelected(new Set())
+    refresh()
+  }
   const api = (path: string, opts?: RequestInit): Promise<void> =>
     apiFetch(`${dataBase(base, node.source)}${path}`, opts).then(refresh)
 
@@ -233,6 +275,7 @@ function VizTable({ node }: { node: VizNode }): React.ReactNode {
   // count sits in the first column.
   const footRow = (rs: FmdRecord[], cls: string): React.ReactNode => (
     <tr className={cls}>
+      {hasBulk && <td className="bulk-cell" />}
       {cols.map((c, ci) => {
         const colSpec = footSpecs.find((s) => s.key && s.key === c.key)
         const countSpec = ci === 0 ? footSpecs.find((s) => s.fn === 'count') : null
@@ -248,7 +291,20 @@ function VizTable({ node }: { node: VizNode }): React.ReactNode {
   )
 
   const renderRow = (r: FmdRecord, ri: number | string): React.ReactNode => (
-    <tr key={r._id ?? ri}>
+    <tr key={r._id ?? ri} className={hasBulk && r._id != null && selected.has(String(r._id)) ? 'row-selected' : undefined}>
+      {hasBulk && (
+        <td className="bulk-cell">
+          {r._id != null && (
+            <input
+              type="checkbox"
+              className="bulk-check"
+              aria-label="Select row"
+              checked={selected.has(String(r._id))}
+              onChange={() => toggleRow(String(r._id))}
+            />
+          )}
+        </td>
+      )}
       {cols.map((c, ci) => {
         const def = fieldDef(fields, c.key)
         return (
@@ -337,12 +393,40 @@ function VizTable({ node }: { node: VizNode }): React.ReactNode {
           {auditNode && <AuditButton source={node.source} title={`${node.source} history`} compact />}
         </div>
       )}
+      {/* Bulk-action toolbar: appears once ≥1 row is selected; each button runs
+          its [Action] once per selected record. */}
+      {hasBulk && selected.size > 0 && (
+        <div className="bulk-bar">
+          <span className="bulk-count">{selected.size} selected</span>
+          {bulkActions.map((b, i) => (
+            <button key={i} className="fmd-button bulk-btn" onClick={() => runBulk(b)}>{b.label}</button>
+          ))}
+          <button className="bulk-clear" onClick={() => setSelected(new Set())}>Clear</button>
+        </div>
+      )}
       {/* wrapper lets a wide table scroll horizontally instead of overflowing on
           narrow (mobile) screens. */}
       <div className="viz-table-wrap">
       <table className="viz-table">
         <thead>
-          <tr>{cols.map((c, i) => <th key={i}>{c.name}</th>)}{canDelete && <th className="row-action" />}{hasRowActions && <th className="row-actions" />}</tr>
+          <tr>
+            {hasBulk && (() => {
+              // Select-all toggles every currently-shown row that has an _id.
+              const ids = rows.filter((r) => r._id != null).map((r) => String(r._id))
+              const allOn = ids.length > 0 && ids.every((id) => selected.has(id))
+              return (
+                <th className="bulk-cell">
+                  <input
+                    type="checkbox"
+                    className="bulk-check"
+                    aria-label="Select all rows"
+                    checked={allOn}
+                    onChange={() => setSelected(() => (allOn ? new Set() : new Set(ids)))}
+                  />
+                </th>
+              )
+            })()}
+            {cols.map((c, i) => <th key={i}>{c.name}</th>)}{canDelete && <th className="row-action" />}{hasRowActions && <th className="row-actions" />}</tr>
         </thead>
         <tbody>
           {rows.length === 0 && !canCreate && (
@@ -351,7 +435,7 @@ function VizTable({ node }: { node: VizNode }): React.ReactNode {
             </td></tr>
           )}
           {body}
-          {canCreate && !group && <NewRow source={node.source} cols={cols} fields={fields} extraCol={canDelete} extraActionCol={hasRowActions} onAdded={refresh} />}
+          {canCreate && !group && <NewRow source={node.source} cols={cols} fields={fields} leadCol={hasBulk} extraCol={canDelete} extraActionCol={hasRowActions} onAdded={refresh} />}
         </tbody>
         {footSpecs.length > 0 && <tfoot>{footRow(rows, 'grand-total')}</tfoot>}
       </table>
