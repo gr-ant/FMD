@@ -27,8 +27,12 @@ interface StepResult {
 }
 
 const api = (apiBase: string, source: string): string => dataBase(apiBase, source)
-const jsonPost = (url: string, method: string, body: FmdRecord): Promise<Response> =>
-  apiFetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+// `via` names the button/action behind a write, sent as X-FMD-Via so the audit
+// trail can attribute the change ("changed Status … by pressing Complete & Charge").
+const jsonPost = (url: string, method: string, body: FmdRecord, via?: string): Promise<Response> =>
+  apiFetch(url, { method, headers: { 'Content-Type': 'application/json', ...(via ? { 'X-FMD-Via': via } : {}) }, body: JSON.stringify(body) })
+const viaDelete = (url: string, via?: string): Promise<Response> =>
+  apiFetch(url, { method: 'DELETE', headers: via ? { 'X-FMD-Via': via } : {} })
 
 // An outbound [Post]/[Call] step: build the request body from the assigns (per
 // the current case record, if any) and POST it through the server's /api/_call
@@ -55,7 +59,7 @@ async function runPostStep(step: PostStepNode, caseRecord: FmdRecord | null): Pr
 // runs from a button inside one). A step with NO `-> source` acts on that record.
 async function runStep(
   step: ActionStep, rules: RuleMap, apiBase: string,
-  caseRecord: FmdRecord | null, caseSource: string | null,
+  caseRecord: FmdRecord | null, caseSource: string | null, via?: string,
 ): Promise<StepResult> {
   // Outbound integration step — routed through the server-side connection proxy.
   if (step.type === 'PostStep') return runPostStep(step, caseRecord)
@@ -67,14 +71,14 @@ async function runStep(
     if (step.op === 'create') return { op: 'create', source: null, count: 0, error: 'create needs a -> source' }
     const url = `${api(apiBase, caseSource)}/${encodeURIComponent(caseRecord._id as string)}`
     const r = step.op === 'delete'
-      ? await apiFetch(url, { method: 'DELETE' })
-      : await jsonPost(url, 'PATCH', buildBody(step.assigns, caseRecord))
+      ? await viaDelete(url, via)
+      : await jsonPost(url, 'PATCH', buildBody(step.assigns, caseRecord), via)
     return { op: step.op, source: caseSource, count: r.ok ? 1 : 0, error: r.ok ? null : `HTTP ${r.status}` }
   }
   const base = api(apiBase, step.source)
 
   if (step.op === 'create') {
-    const r = await jsonPost(base, 'POST', buildBody(step.assigns, caseRecord || {}))
+    const r = await jsonPost(base, 'POST', buildBody(step.assigns, caseRecord || {}), via)
     return { op: 'create', source: step.source, count: r.ok ? 1 : 0, error: r.ok ? null : `HTTP ${r.status}` }
   }
 
@@ -89,8 +93,8 @@ async function runStep(
     const url = `${base}/${encodeURIComponent(row._id)}`
     const r =
       step.op === 'delete'
-        ? await apiFetch(url, { method: 'DELETE' })
-        : await jsonPost(url, 'PATCH', buildBody(step.assigns, row))
+        ? await viaDelete(url, via)
+        : await jsonPost(url, 'PATCH', buildBody(step.assigns, row), via)
     if (r.ok) count++
   }
   return { op: step.op, source: step.source, count, error: null }
@@ -113,10 +117,19 @@ export async function executeAction(
   { rules, base = '/api', record = null, source = null }:
     { rules?: RuleMap; base?: string; record?: FmdRecord | null; source?: string | null } = {},
 ): Promise<StepResult[]> {
+  const via = action.name || undefined
+  // Log the button press itself (best-effort), so the audit trail records the
+  // action even when it matched no rows; the writes below are attributed via X-FMD-Via.
+  if (via) {
+    apiFetch('/api/_audit', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ verb: 'action', source, record: record?._id ?? null, summary: `Ran “${via}”` }),
+    }).catch(() => { /* auditing is best-effort */ })
+  }
   const results: StepResult[] = []
   for (const step of action.steps || []) {
     try {
-      results.push(await runStep(step, rules || {}, base, record, source))
+      results.push(await runStep(step, rules || {}, base, record, source, via))
     } catch (e) {
       results.push({ op: step.op, source: 'source' in step ? step.source : null, count: 0, error: String(e) })
     }

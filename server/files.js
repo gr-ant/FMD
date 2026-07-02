@@ -17,6 +17,7 @@ import { randomBytes } from 'crypto'
 import { pool, sendErr } from './db.js'
 import { guard } from './permissions.js'
 import { slugify } from './deploy.js'
+import { logAudit, actorOf } from './audit.js'
 
 const MAX_BYTES = 25 * 1024 * 1024 // 25 MB per file
 
@@ -61,6 +62,7 @@ export function registerFileRoutes(app) {
       await pool.query(
         `INSERT INTO _fmd_files (id, name, mime, size, source, data) VALUES ($1, $2, $3, $4, $5, $6)`,
         [id, safeName, safeMime, buf.length, src, buf])
+      logAudit(pool, { source: src, verb: 'file', actor: actorOf(req), summary: `Uploaded “${safeName}”`, detail: { name: safeName, mime: safeMime, size: buf.length } })
       res.json({ id, name: safeName, mime: safeMime, size: buf.length })
     } catch (e) { sendErr(res, e) }
   })

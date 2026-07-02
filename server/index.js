@@ -23,6 +23,7 @@ import { registerExtRoutes } from './ext.js'
 import { registerConnectionRoutes } from './connections.js'
 import { registerFileRoutes } from './files.js'
 import { registerChatRoutes } from './chat.js'
+import { registerAuditRoutes } from './audit.js'
 import { registerTriggerRoutes, startTriggerSweep } from './triggers.js'
 
 const PORT = process.env.PORT || 4000
@@ -48,6 +49,7 @@ registerExtRoutes(app) // _ext/* — external API data sources, before /api/:sou
 registerConnectionRoutes(app) // _conn(s)/* + _call/* — outbound integrations, before /api/:source
 registerFileRoutes(app) // _files/* — file upload/download, before /api/:source
 registerChatRoutes(app) // _chat — read-only AI chat, before the catch-all /api/:source
+registerAuditRoutes(app) // _audit — activity log, before the catch-all /api/:source
 registerCrudRoutes(app)
 
 init()

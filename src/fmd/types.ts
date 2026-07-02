@@ -251,6 +251,16 @@ export interface TotalNode extends BaseNode {
   expr: string
 }
 
+// An activity-log / audit component. Standalone in a [Display] it renders the
+// whole app's feed; nested under a [Table] it adds a history icon to the table
+// header (scoped to that source); nested under a [Cases] it shows the record's
+// full trail on the case page. `source` optionally scopes a standalone feed.
+export interface AuditNode extends BaseNode {
+  type: 'Audit'
+  source: string | null
+  label: string
+}
+
 // A named, reusable rule.
 export interface RuleNode extends BaseNode {
   type: 'Rule'
@@ -466,6 +476,7 @@ export type Node =
   | FormFieldNode
   | LineItemsNode
   | TotalNode
+  | AuditNode
   | RuleNode
   | RoleNode
   | PermissionNode

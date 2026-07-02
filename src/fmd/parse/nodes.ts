@@ -413,6 +413,12 @@ function parseNodeInner(line: string): Node {
       const expr = eq === -1 ? '' : content.slice(eq + 1).trim()
       return { type: 'Total', name, expr, children: [] }
     }
+    // An activity log / audit trail: [Audit] (alias [History]/[Activity Log]).
+    // Standalone -> the whole app's feed; nested in a [Table] -> a history icon on
+    // that table; nested in a [Cases] -> the record's trail on its case page.
+    if (first === 'audit' || first === 'history' || first === 'activitylog' || lowerInner === 'activity log') {
+      return { type: 'Audit', source: innerSource ? innerSource.toLowerCase() : null, label: content.trim(), children: [] }
+    }
     // A single-record view: [Detail -> WorkOrders] Ticket, Customer, Total.
     // Shows one chosen record's fields, with nested views beneath it. Inside a
     // nested view's `?` filter, `this` refers to the chosen record (see the

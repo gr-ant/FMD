@@ -10,6 +10,7 @@ import { evalExpr } from '../../fmd/calc'
 import { formatValue, fieldDef, fieldType } from '../../fmd/format'
 import { EditableCell, NewRow } from './inputs'
 import { FileView } from './fileInput'
+import { AuditButton } from './audit'
 import { classify, Checklist, Empty } from './shared'
 import { FormButton, spanOf } from './forms'
 import { filterRows, useFields, resolveField, type ResolvedField } from './vizShared'
@@ -152,6 +153,8 @@ function VizTable({ node }: { node: VizNode }): React.ReactNode {
   // Each [Filter] resolves to a column key plus the distinct display values of
   // the loaded rows (deduped, original order) for its dropdown.
   const hasControls = !!searchNode || filterNodes.length > 0
+  // An indented [Audit] adds a history icon to the table header (this source's trail).
+  const auditNode = node.children.find((c) => c.type === 'Audit')
   const filters = filterNodes.map((f) => {
     const rf = resolveField(fields, rows, f.field)
     const type = fieldType(fields, rf.key)
@@ -309,7 +312,7 @@ function VizTable({ node }: { node: VizNode }): React.ReactNode {
 
   return (
     <>
-      {hasControls && (
+      {(hasControls || auditNode) && (
         <div className="viz-controls">
           {searchNode && (
             <input
@@ -331,6 +334,7 @@ function VizTable({ node }: { node: VizNode }): React.ReactNode {
               {f.values.map((v, vi) => <option key={vi} value={v}>{v}</option>)}
             </select>
           ))}
+          {auditNode && <AuditButton source={node.source} title={`${node.source} history`} compact />}
         </div>
       )}
       {/* wrapper lets a wide table scroll horizontally instead of overflowing on
@@ -631,13 +635,18 @@ export function VizCases({ node }: { node: CasesNode }): React.ReactNode {
 // buttons resolve against the case's record.
 export function CasePage({ caseView, onBack }: { caseView: OpenCaseValue; onBack: () => void }): React.ReactNode {
   const { record, source, children } = caseView
+  // An indented [Audit] under the [Cases] shows a history button at the top of the
+  // record's page (its full trail); it's excluded from the inline content below.
+  const auditNode = children.find((c) => c.type === 'Audit')
+  const content = auditNode ? children.filter((c) => c.type !== 'Audit') : children
   return (
     <RecordContext.Provider value={{ record, source }}>
       <div className="fmd-display case-page">
         <div className="case-back-bar">
           <button className="cases-back" onClick={onBack}>← Back</button>
+          {auditNode && <AuditButton source={source} record={record._id != null ? String(record._id) : null} title="Record history" />}
         </div>
-        {children.map((c, i) => <Renderer key={i} node={bindThis(c, record)} />)}
+        {content.map((c, i) => <Renderer key={i} node={bindThis(c, record)} />)}
       </div>
     </RecordContext.Provider>
   )

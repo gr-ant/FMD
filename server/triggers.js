@@ -10,6 +10,7 @@
 import { pool, q, qn, cleanVal } from './db.js'
 import { slugify } from './deploy.js'
 import { callConnection } from './connections.js'
+import { logAudit } from './audit.js'
 
 // ---------------------------------------------------------------------------
 // Pure engine (ported, dependency-free) -------------------------------------
@@ -201,6 +202,10 @@ async function runTrigger(schema, trigger, rules) {
   const { kind, rows } = await readRows(schema, trigger.source)
   const matched = rows.filter((row) => passes(trigger.condition, row, rules))
   for (const row of matched) {
+    // Log the automation firing (editor DB only) so it shows in the audit trail.
+    if (schema === 'public') {
+      logAudit(pool, { source: trigger.source, recordId: row._id, verb: 'trigger', actor: 'Automation', summary: `Trigger “${trigger.label || 'automation'}” ran` })
+    }
     for (const step of trigger.steps || []) {
       if (step.type === 'PostStep' || step.op === 'post') {
         // Outbound integration: call the named connection with an interpolated

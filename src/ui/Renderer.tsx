@@ -7,6 +7,7 @@ import type {
 } from '../fmd/types'
 import { WidgetCard, Viz, VizDetail, VizCases, VizView, FormButton } from '../Widget'
 import { AIChat } from './widgets/aichat'
+import { AuditView } from './widgets/audit'
 import { isDataBlock, visibleForRoles } from '../parser'
 import { useSource, keysOf, useVisibilityRoles, useUserMgmt, useCase, SchemaContext } from '../data'
 import { interpolate, formatValue, fieldType } from '../fmd/format'
@@ -81,6 +82,9 @@ export default function Renderer({ node }: { node: Node | null }) {
 
     case 'AIChat':
       return <AIChat node={node} />
+
+    case 'Audit':
+      return <AuditView node={node} />
 
     case 'Button':
       return <FormButton node={node} />
