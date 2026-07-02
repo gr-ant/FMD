@@ -123,7 +123,7 @@ export async function executeAction(
   if (via) {
     apiFetch('/api/_audit', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ verb: 'action', source, record: record?._id ?? null, summary: `Ran “${via}”` }),
+      body: JSON.stringify({ verb: 'action', source, record: record?._id ?? null, summary: `Ran “${via}”`, detail: { via } }),
     }).catch(() => { /* auditing is best-effort */ })
   }
   const results: StepResult[] = []

@@ -6,7 +6,7 @@
 import React, { useEffect, useState } from 'react'
 import type { AuditNode, Field } from '../../fmd/types'
 import { useApiBase, useRecord } from '../../data'
-import { apiFetch } from '../../state/auth'
+import { apiFetch, isCurrentUser } from '../../state/auth'
 import { useFields } from './vizShared'
 
 interface AuditEvent {
@@ -17,7 +17,7 @@ interface AuditEvent {
   verb: string
   actor: string | null
   summary: string | null
-  detail: { changes?: { field: string; from?: unknown; to?: unknown }[]; via?: string; fields?: string[] } | null
+  detail: { changes?: { field: string; from?: unknown; to?: unknown }[]; via?: string; fields?: string[]; name?: string } | null
 }
 
 const VERB_ICON: Record<string, string> = {
@@ -37,26 +37,27 @@ function timeAgo(ts: string): string {
   return new Date(ts).toLocaleDateString()
 }
 
-// One event as a plain-English sentence, using field labels where known.
+// One event as a plain-English sentence, using field labels where known. The
+// current user's own actions read "You" instead of their name.
 function eventText(e: AuditEvent, fields: Field[] | null): string {
-  const actor = e.actor || 'Someone'
+  const who = isCurrentUser(e.actor) ? 'You' : (e.actor || 'Someone')
   const label = (f: string): string => fields?.find((x) => x.name.toLowerCase() === f.toLowerCase())?.label || humanize(f)
   const via = e.detail?.via ? ` by pressing “${e.detail.via}”` : ''
   switch (e.verb) {
-    case 'create': return `${actor} added a record${via}.`
-    case 'delete': return `${actor} deleted a record${via}.`
+    case 'create': return `${who} added a record${via}.`
+    case 'delete': return `${who} deleted a record${via}.`
     case 'update': {
       const ch = e.detail?.changes || []
-      if (!ch.length) return `${actor} edited a record${via}.`
+      if (!ch.length) return `${who} edited a record${via}.`
       const parts = ch.map((c) => c.from !== undefined
         ? `${label(c.field)} from “${c.from ?? ''}” to “${c.to ?? ''}”`
         : `${label(c.field)} to “${c.to ?? ''}”`)
-      return `${actor} changed ${parts.join(', ')}${via}.`
+      return `${who} changed ${parts.join(', ')}${via}.`
     }
     case 'trigger': return e.summary || 'An automation ran.'
-    case 'file': return e.summary || `${actor} uploaded a file.`
-    case 'action': case 'button': return e.summary || `${actor} pressed a button.`
-    default: return e.summary || `${actor} ${e.verb}.`
+    case 'file': return e.detail?.name ? `${who} uploaded “${e.detail.name}”.` : (e.summary || `${who} uploaded a file.`)
+    case 'action': case 'button': return e.detail?.via ? `${who} ran “${e.detail.via}”.` : (e.summary || `${who} pressed a button.`)
+    default: return e.summary || `${who} ${e.verb}.`
   }
 }
 

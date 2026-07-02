@@ -174,6 +174,22 @@ export function getUser(): { name: string; roles: string[] } | null {
     return { name: 'user', roles: getRoles() }
   }
 }
+// Does an audit actor string refer to the currently signed-in user? Checks every
+// identity claim the server might have recorded (name / username / email / sub),
+// so the feed can show "You" even if the server stored a different claim than the
+// client's display name.
+export function isCurrentUser(actor: string | null | undefined): boolean {
+  if (!actor) return false
+  const t = getToken()
+  if (!t) return false
+  try {
+    const p = decodeJwt(t)
+    const names = [p.name, p.preferred_username, p.email, p.sub]
+      .filter(Boolean).map((x) => String(x).toLowerCase())
+    return names.includes(String(actor).toLowerCase())
+  } catch { return false }
+}
+
 export function logout(): void {
   sessionStorage.removeItem(TOKEN_KEY)
   sessionStorage.removeItem(ROLES_KEY)
