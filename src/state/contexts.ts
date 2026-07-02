@@ -50,7 +50,7 @@ export function useCaseNav(): { open: (c: OpenCaseValue) => void } {
 
 // The collected [Form] definitions, so a [View -> FormName] can find its form by
 // name (forms are otherwise only opened by [Button]s).
-export interface FormDef { title: string; source: string | null; size?: 'compact' | 'standard' | 'wide'; fields: Array<{ field: string; label: string; width?: number | null }> }
+export interface FormDef { title: string; source: string | null; size?: 'compact' | 'standard' | 'wide'; fields: Array<{ field: string; label: string; width?: number | null }>; lineItems?: { source: string | null; cols: Array<{ field: string; label: string; width?: number | null }> } | null; totals?: Array<{ name: string; expr: string }> }
 export const FormsListContext = createContext<FormDef[]>([])
 export function useFormsList(): FormDef[] {
   return useContext(FormsListContext)

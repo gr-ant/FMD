@@ -1,7 +1,7 @@
 // Tag/line node parsing: regexes, comment handling, and parseNode().
 // -------------------------------------------------------------
 
-import type { Node, RoleVisibility, VizNode, ApiNode } from '../types'
+import type { Node, RoleVisibility, VizNode } from '../types'
 import { parseFields } from './fields'
 
 export const TAG_RE = /^\[([^\]]+)\]\s*(.*)$/
@@ -392,6 +392,26 @@ function parseNodeInner(line: string): Node {
         return { field, label: field, required, showIf: null as string | null, readonly, autofill: null as string | null, width, accept }
       })
       return { type: 'FormField', entries, children: [] }
+    }
+    // A repeating line-item grid inside a [Form]: [LineItems -> OrderLines] Item, 1Qty, 2Price.
+    // Each grid row saves to the named source on submit, linked to the new parent.
+    // Columns parse exactly like [Fields] (name + `!`/width/`(img,pdf)` markers).
+    if (first === 'lineitems' || first === 'lines') {
+      const cols = splitFieldsTop(content).map((s) => s.trim()).filter(Boolean).map((tok) => {
+        const { base, accept } = extractAccept(tok)
+        const { field, required, readonly, width } = parseFieldMarkers(base)
+        return { field, label: field, required, showIf: null as string | null, readonly, autofill: null as string | null, width, accept }
+      })
+      return { type: 'LineItems', source: innerSource ? innerSource.toLowerCase() : null, cols, children: [] }
+    }
+    // A computed total line inside a [Form]: [Total] Grand = Subtotal + Tax. The
+    // expression may aggregate the line rows (sum/avg/min/max/count) and reference
+    // earlier totals by name; the result is stored on the parent on submit.
+    if (first === 'total') {
+      const eq = content.indexOf('=')
+      const name = (eq === -1 ? content : content.slice(0, eq)).trim()
+      const expr = eq === -1 ? '' : content.slice(eq + 1).trim()
+      return { type: 'Total', name, expr, children: [] }
     }
     // A single-record view: [Detail -> WorkOrders] Ticket, Customer, Total.
     // Shows one chosen record's fields, with nested views beneath it. Inside a

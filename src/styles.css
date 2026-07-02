@@ -349,6 +349,33 @@ select.cell-input option { background: var(--panel); color: var(--text); }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 6px; }
 .req { color: #ff7a7a; margin-left: 3px; }
 
+/* [LineItems] repeating grid inside a form — a header row of column labels then
+   one editable row per line item, columns set inline to repeat(cols, 1fr) auto. */
+.line-items { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 12px; }
+.line-items-head, .line-item-row { display: grid; align-items: center; column-gap: 10px; }
+.line-items-head { margin-bottom: 6px; }
+.li-col-label { font-size: 12px; color: var(--muted); }
+.line-item-row { margin-bottom: 8px; }
+.li-cell .cell-input, .li-cell .form-input, .li-cell .num-input { width: 100%; box-sizing: border-box; }
+.li-remove {
+  width: 26px; height: 26px; padding: 0; border-radius: 6px; line-height: 1;
+  border: 1px solid var(--line); background: var(--bg); color: var(--muted); cursor: pointer;
+}
+.li-remove:hover:not(:disabled) { border-color: #ff7a7a; color: #ff7a7a; }
+.li-remove:disabled { opacity: .4; cursor: default; }
+.li-add {
+  margin-top: 2px; padding: 6px 10px; font-size: 13px; border-radius: 8px;
+  border: 1px dashed var(--line); background: transparent; color: var(--accent); cursor: pointer;
+}
+.li-add:hover { border-color: var(--accent); }
+
+/* computed [Total] lines — right-aligned label/value rows, grand total emphasized */
+.form-totals { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.form-total-row { display: flex; justify-content: space-between; gap: 24px; min-width: 200px; }
+.form-total-label { color: var(--muted); }
+.form-total-row:last-child { font-weight: 600; font-size: 15px; }
+.form-total-row:last-child .form-total-label { color: var(--text); }
+
 /* External API ([API]) setup wizard + its editor launch bar */
 .api-setup-bar { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--line); background: #ffffff05; }
 .api-setup-btn { padding: 4px 10px; font-size: 12px; }

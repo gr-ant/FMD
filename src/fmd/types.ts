@@ -229,6 +229,24 @@ export interface FormFieldNode extends BaseNode {
   }[]
 }
 
+// A repeating line-item grid inside a [Form]: [LineItems -> OrderLines] Item, Qty, Price.
+// Each grid row is saved to `source` on submit, linked back to the newly-created
+// parent record. Columns parse exactly like [Fields] (same entry shape).
+export interface LineItemsNode extends BaseNode {
+  type: 'LineItems'
+  source: string | null
+  cols: FormFieldNode['entries']
+}
+
+// A computed total inside a [Form]: [Total] Grand = Subtotal + Tax. `expr` may use
+// sum()/avg()/min()/max()/count() over the line-item rows and reference earlier
+// totals by name; the result is stored on the parent record on submit.
+export interface TotalNode extends BaseNode {
+  type: 'Total'
+  name: string
+  expr: string
+}
+
 // A named, reusable rule.
 export interface RuleNode extends BaseNode {
   type: 'Rule'
@@ -413,6 +431,8 @@ export type Node =
   | RowButtonNode
   | FormNode
   | FormFieldNode
+  | LineItemsNode
+  | TotalNode
   | RuleNode
   | RoleNode
   | PermissionNode

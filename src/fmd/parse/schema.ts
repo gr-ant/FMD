@@ -14,6 +14,8 @@ import type {
   TriggerNode,
   FormNode,
   FormFieldNode,
+  LineItemsNode,
+  TotalNode,
   PermissionNode,
   PermissionVerb,
   EntityPermissions,
@@ -256,6 +258,9 @@ interface CollectedForm {
   source: string | null
   size: FormSize
   fields: FormFieldNode['entries']
+  // An optional repeating line-item grid ([LineItems]) and computed [Total] lines.
+  lineItems: { source: string | null; cols: FormFieldNode['entries'] } | null
+  totals: { name: string; expr: string }[]
 }
 
 // A `[Size] Wide` line indented under a [Form] sets its modal width.
@@ -278,6 +283,13 @@ export function collectForms(root: RootNode): CollectedForm[] {
       fields: f.children
         .filter((c): c is FormFieldNode => c.type === 'FormField')
         .flatMap((c) => c.entries),
+      lineItems: (() => {
+        const li = f.children.find((c): c is LineItemsNode => c.type === 'LineItems')
+        return li ? { source: li.source, cols: li.cols } : null
+      })(),
+      totals: f.children
+        .filter((c): c is TotalNode => c.type === 'Total')
+        .map((t) => ({ name: t.name, expr: t.expr })),
     }))
 }
 
