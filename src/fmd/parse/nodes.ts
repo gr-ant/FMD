@@ -356,6 +356,12 @@ function parseNodeInner(line: string): Node {
     if (first === 'button') {
       return { type: 'Button', label: content, target: innerSource ? innerSource.toLowerCase() : null, children: [] }
     }
+    // A CSV-import button: [Import -> Source] Label  (alias [CSV -> Source] Label).
+    // Clicking opens a modal where the user pastes/uploads CSV, maps columns to the
+    // source's declared fields, previews, and bulk-POSTs each row.
+    if (first === 'import' || first === 'csv') {
+      return { type: 'Import', label: content || 'Import CSV', source: innerSource ? innerSource.toLowerCase() : null, children: [] }
+    }
     // A per-row action button inside a [Table]/[Cases]: [RowButton -> Action] Label
     // (alias [RowAction]). Parses exactly like [Button] — `-> Target` names an
     // [Action], the trailing text is the label — but the renderer draws it once per
