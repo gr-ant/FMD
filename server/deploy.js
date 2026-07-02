@@ -4,6 +4,7 @@
 // `public` is untouched, and apps can't see each other.
 import { pool, q, qn, sqlTypeFor, cleanVal, reservedClash } from './db.js'
 import { guard } from './permissions.js'
+import { applyAutoNumbers } from './autonumber.js'
 
 const APP_PREFIX = 'app_'
 export const slugify = (s) =>
@@ -18,6 +19,9 @@ async function provision(client, schema) {
   await client.query(`CREATE INDEX IF NOT EXISTS documents_collection_idx ON ${qn(schema, '_fmd_documents')} (collection)`)
   await client.query(
     `CREATE TABLE IF NOT EXISTS ${qn(schema, '_fmd_configs')} (key TEXT PRIMARY KEY, value JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`)
+  // Per-app auto-number counters ([Auto] fields), isolated from other apps.
+  await client.query(
+    `CREATE TABLE IF NOT EXISTS ${qn(schema, '_fmd_seq')} (source TEXT NOT NULL, field TEXT NOT NULL, counter BIGINT NOT NULL DEFAULT 0, PRIMARY KEY (source, field))`)
 }
 
 // Reconcile [List]/[Store] entities into the app schema (data-preserving on
@@ -39,7 +43,7 @@ async function applyEntities(client, schema, entities) {
   const { rows: tRows } = await client.query(
     `SELECT table_name FROM information_schema.tables
      WHERE table_schema = $1 AND table_type = 'BASE TABLE'
-       AND table_name NOT IN ('_fmd_configs', '_fmd_documents', '_fmd_files')`, [schema])
+       AND table_name NOT IN ('_fmd_configs', '_fmd_documents', '_fmd_files', '_fmd_seq')`, [schema])
   const currentTables = new Set(tRows.map((r) => r.table_name))
   for (const t of currentTables) {
     const d = desired.get(t)
@@ -112,7 +116,10 @@ export function registerDeployRoutes(app) {
       // Persist the permission model alongside the app so its /api/_app/* routes
       // enforce it (without this, deployed apps would have no permissions to check).
       const permissions = req.body?.permissions && typeof req.body.permissions === 'object' ? req.body.permissions : {}
-      for (const [k, v] of [['document', doc], ['appName', name], ['triggers', triggers], ['rules', rules], ['permissions', permissions]]) {
+      // Auto-number model ({ source: { field: pattern } }) so the app's create
+      // route fills [Auto] ids from the app schema's own counter (see autonumber.js).
+      const autonumbers = req.body?.autonumbers && typeof req.body.autonumbers === 'object' ? req.body.autonumbers : {}
+      for (const [k, v] of [['document', doc], ['appName', name], ['triggers', triggers], ['rules', rules], ['permissions', permissions], ['autonumbers', autonumbers]]) {
         await client.query(
           `INSERT INTO ${qn(schema, '_fmd_configs')} (key, value) VALUES ($1, $2)
            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`, [k, JSON.stringify(v)])
@@ -152,7 +159,7 @@ export function registerDeployRoutes(app) {
         const { rows: tRows } = await pool.query(
           `SELECT table_name FROM information_schema.tables
            WHERE table_schema = $1 AND table_type = 'BASE TABLE'
-             AND table_name NOT IN ('_fmd_documents', '_fmd_configs', '_fmd_files')
+             AND table_name NOT IN ('_fmd_documents', '_fmd_configs', '_fmd_files', '_fmd_seq')
            ORDER BY table_name`, [sch])
         const tables = []
         for (const { table_name: t } of tRows) {
@@ -266,9 +273,10 @@ export function registerDeployRoutes(app) {
     const { source } = req.params
     if (source.startsWith('_')) return res.status(404).json({ error: 'reserved' })
     if (!(await guard(req, res, source, 'POST', { schema, requireAuth: true }))) return
-    const body = req.body || {}
     try {
       if ((await kindOf(schema, source)) === 'list') {
+        // Fill empty [Auto] ids from this app schema's own counter before insert.
+        const body = await applyAutoNumbers(pool, source, req.body || {}, schema)
         const cols = await appColumns(schema, source)
         const keys = Object.keys(body).filter((k) => cols.includes(k))
         if (!keys.length) return res.status(400).json({ error: 'no known columns' })
@@ -278,7 +286,7 @@ export function registerDeployRoutes(app) {
           keys.map((k) => cleanVal(body[k])))
         return res.json(rows[0])
       }
-      const doc = { ...body }; delete doc._id
+      const doc = { ...(req.body || {}) }; delete doc._id
       const { rows } = await pool.query(
         `INSERT INTO ${qn(schema, '_fmd_documents')} (collection, doc) VALUES ($1, $2) RETURNING id, doc`, [source, JSON.stringify(doc)])
       res.json({ ...rows[0].doc, _id: rows[0].id })

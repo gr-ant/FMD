@@ -313,6 +313,18 @@ function parseNodeInner(line: string): Node {
       if (i === -1) return { type: 'Rollup', field: content.trim(), expr: null, children: [] }
       return { type: 'Rollup', field: content.slice(0, i).trim(), expr: content.slice(i + 1).trim(), children: [] }
     }
+    // A server-generated auto-number field: [Auto] OrderNo = "WO-####". On create,
+    // when the field is empty the server fills it with the next sequential value.
+    // `####` is a zero-padded counter; `{year}` -> the current year; the rest is a
+    // literal prefix/suffix. Quotes around the pattern are optional but recommended
+    // (they protect a leading `#` run from being read as a comment).
+    if (first === 'auto') {
+      const i = content.indexOf('=')
+      const field = (i === -1 ? content : content.slice(0, i)).trim()
+      let pattern = i === -1 ? '' : content.slice(i + 1).trim()
+      pattern = pattern.replace(/^"(.*)"$/, '$1').replace(/^'(.*)'$/, '$1')
+      return { type: 'Auto', field, pattern, children: [] }
+    }
     // Table sub-directives, indented under a [Table]: a footer of column
     // aggregates, a sort order, and group-by sections (with per-group subtotals
     // when a [Foot] is also present).

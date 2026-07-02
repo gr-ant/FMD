@@ -3,6 +3,7 @@ import { pool, KIND, q, listColumns, cleanVal } from './db.js'
 import { guard } from './permissions.js'
 import { fetchExternal } from './ext.js'
 import { logAudit, actorOf, viaOf } from './audit.js'
+import { applyAutoNumbers } from './autonumber.js'
 
 export function registerCrudRoutes(app) {
   // The one endpoint the frontend uses. Routes by storage kind automatically.
@@ -41,9 +42,11 @@ export function registerCrudRoutes(app) {
     if (source.startsWith('_')) return res.status(404).json({ error: 'reserved' })
     if (!(await guard(req, res, source, 'POST'))) return
     const kind = KIND[source]
-    const body = req.body || {}
     try {
       if (kind === 'list') {
+        // Fill any empty [Auto] field with its next server-generated id first, so
+        // it flows through the normal column insert below (collision-safe counter).
+        const body = await applyAutoNumbers(pool, source, req.body || {})
         const cols = await listColumns(source)
         const keys = Object.keys(body).filter((k) => cols.includes(k))
         if (!keys.length) return res.status(400).json({ error: 'no known columns' })
@@ -55,7 +58,7 @@ export function registerCrudRoutes(app) {
         return res.json(rows[0])
       }
       if (kind === 'store') {
-        const doc = { ...body }; delete doc._id
+        const doc = { ...(req.body || {}) }; delete doc._id
         const { rows } = await pool.query(
           `INSERT INTO _fmd_documents (collection, doc) VALUES ($1, $2) RETURNING id, doc`, [source, JSON.stringify(doc)])
         await logAudit(pool, { source, recordId: rows[0].id, verb: 'create', actor: actorOf(req), detail: { fields: Object.keys(doc), via: viaOf(req) } })
