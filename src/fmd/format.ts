@@ -21,12 +21,19 @@ export function formatValue(value: unknown, type?: FieldType): string {
 // Interpolate `[[FieldName]]` tokens in a string with the current record's values
 // (case-insensitive). Used to inline a field as text inside a [Cases] case, e.g.
 // a [Text] line "Owner: [[OwnerName]]". With no record (outside a case) the text
-// is returned unchanged. A missing field renders empty.
-export function interpolate(text: string, record: Record<string, unknown> | null): string {
+// is returned unchanged. A missing/empty field renders empty. An optional
+// `format(field, value)` lets callers render each value by its declared type
+// (so a boolean reads "Yes", a date/currency formats) — matching the cells.
+export function interpolate(
+  text: string,
+  record: Record<string, unknown> | null,
+  format?: (field: string, value: unknown) => string,
+): string {
   if (!record || typeof text !== 'string' || !text.includes('[[')) return text
   return text.replace(/\[\[\s*([^\]]+?)\s*\]\]/g, (_, name: string) => {
     const k = Object.keys(record).find((kk) => kk.toLowerCase() === name.trim().toLowerCase())
-    return k == null || record[k] == null ? '' : String(record[k])
+    if (k == null || record[k] == null || record[k] === '') return ''
+    return format ? format(k, record[k]) : String(record[k])
   })
 }
 

@@ -7,7 +7,7 @@ import { matchAction } from '../panels/helpers'
 import { useDialogs } from '../dialogs'
 import { TypedInput } from './inputs'
 import { useFields } from './viz'
-import { ActionNode, ButtonNode, Field, FmdRecord } from '../../fmd/types'
+import { ActionNode, ButtonNode, RowButtonNode, Field, FmdRecord } from '../../fmd/types'
 import { apiFetch, dataBase, getUser } from '../../state/auth'
 
 // One declared field inside a collected [Form] (from FormFieldNode entries).
@@ -45,18 +45,22 @@ type FormDef = {
   fields: FormField[]
 }
 
-// Clamp a field's declared width to 1–3 columns; default full width (3).
-const spanOf = (w: number | null): number => (w && w >= 1 && w <= 3 ? w : 3)
+// Clamp a field's declared width to 1–3 columns; default full width (3). Shared
+// so a read-only [View] panel lays its fields out identically to the form modal.
+export const spanOf = (w: number | null | undefined): number => (w && w >= 1 && w <= 3 ? w : 3)
 
 // A button. If its target names an [Action] it runs that action's steps;
-// otherwise it opens the matching [Form] modal (via FormsContext).
-export function FormButton({ node }: { node: ButtonNode }) {
+// otherwise it opens the matching [Form] modal (via FormsContext). A `[RowButton]`
+// inside a [Table]/[Cases] renders the same way with `compact` set, wrapped per-row
+// in a RecordContext so `useCase()` here resolves to that row.
+export function FormButton({ node, compact }: { node: ButtonNode | RowButtonNode; compact?: boolean }) {
   const forms = useContext(FormsContext)
   const { actions, run } = useContext(ActionsContext)
   const dialogs = useDialogs()
   const caseCtx = useCase() // when inside a [Cases]/[Detail] case, target its record
   // ActionsContext stores actions loosely (Record<string, unknown>); matchAction
-  // narrows to the ActionNode-shaped entries by name.
+  // narrows to the ActionNode-shaped entries by name. [RowButton] shares [Button]'s
+  // label/target shape, so the same match/run machinery applies.
   const action = matchAction(actions as Record<string, ActionNode>, node)
   // A button whose action deletes records is destructive: paint it as a danger
   // button and make it confirm before running (the write can't be undone).
@@ -72,7 +76,7 @@ export function FormButton({ node }: { node: ButtonNode }) {
         run(action, caseCtx)
       }
     : () => forms.open(node)
-  return <button className={`fmd-button${destructive ? ' danger' : ''}`} onClick={onClick}>{node.label}</button>
+  return <button className={`fmd-button${compact ? ' row-btn' : ''}${destructive ? ' danger' : ''}`} onClick={onClick}>{node.label}</button>
 }
 
 // A modal form that creates a record in its source on submit.

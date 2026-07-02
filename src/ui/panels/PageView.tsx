@@ -7,15 +7,36 @@ type Props = {
   activeName: string
   menuItems: string[]
   onSelect: (item: string) => void
+  side?: boolean // the menu is a [SideMenu] -> render a left rail + content column
 }
 
 // Renders the active page inside the display shell. The menu is shared nav: it
 // persists across pages (injected when a page has none) and switches the page.
-export default function PageView({ page, activeName, menuItems, onSelect }: Props) {
+export default function PageView({ page, activeName, menuItems, onSelect, side }: Props) {
   const nav = menuItems.length > 0
-    ? <Menu items={menuItems} active={activeName} onSelect={onSelect} />
+    ? <Menu items={menuItems} active={activeName} onSelect={onSelect} side={side} />
     : null
   const children = page ? page.children : []
+  const empty = (
+    <div className="page-empty">
+      No <code>[Display] {activeName}</code> page yet — add one to fill this tab.
+    </div>
+  )
+
+  // A [SideMenu] lays the page out as a left rail + content column; the nav
+  // always lives in the rail regardless of where the [SideMenu] tag was written.
+  if (side) {
+    const body = page
+      ? children.filter((c) => c.type !== 'Menu').map((c, i) => <Renderer key={i} node={c} />)
+      : empty
+    return (
+      <div className="fmd-display has-side-menu">
+        {nav && <aside className="fmd-side-rail">{nav}</aside>}
+        <div className="fmd-page-content">{body}</div>
+      </div>
+    )
+  }
+
   const hasMenu = children.some((c) => c.type === 'Menu')
   return (
     <div className="fmd-display">
@@ -23,9 +44,7 @@ export default function PageView({ page, activeName, menuItems, onSelect }: Prop
       {page ? (
         children.map((c, i) => (c.type === 'Menu' ? <span key={i}>{nav}</span> : <Renderer key={i} node={c} />))
       ) : (
-        <div className="page-empty">
-          No <code>[Display] {activeName}</code> page yet — add one to fill this tab.
-        </div>
+        empty
       )}
     </div>
   )

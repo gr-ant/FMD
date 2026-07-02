@@ -8,7 +8,7 @@ export const TAG_RE = /^\[([^\]]+)\]\s*(.*)$/
 export const WIDGET_RE = /\(([^)]*)\)/g
 export const WIDGET_LINE_RE = /^\(([^)]+)\)$/
 
-export const VIZ_TAGS = new Set(['table', 'counter', 'checklist', 'slider', 'board', 'calendar'])
+export const VIZ_TAGS = new Set(['table', 'counter', 'checklist', 'slider', 'board', 'calendar', 'chart'])
 export const ITEM_TAGS: Record<string, string> = { count: 'count', counts: 'count', slide: 'slide', slides: 'slide' }
 
 // The record-write verbs an [Action] is built from. Each is a step that hits the
@@ -233,9 +233,15 @@ function parseNodeInner(line: string): Node {
     if (first === 'permission' || first === 'permissions') {
       return { type: 'Permission', children: [] }
     }
-    if (lowerInner === 'top menu bar' || first === 'topmenu' || first === 'menu' || first === 'nav') {
+    // Navigation between [Display] pages. `[Top Menu Bar]`/`[Menu]`/`[Nav]` render
+    // a horizontal tab bar; `[SideMenu]`/`[Side Menu]`/`[Sidebar]` render a vertical
+    // rail down the left of the page. Both take a comma-separated list of pages.
+    if (lowerInner === 'top menu bar' || lowerInner === 'side menu'
+      || first === 'topmenu' || first === 'menu' || first === 'nav'
+      || first === 'sidemenu' || first === 'sidebar') {
       const items = content.split(',').map((s) => s.trim()).filter(Boolean)
-      return { type: 'Menu', items, children: [] }
+      const side = lowerInner === 'side menu' || first === 'sidemenu' || first === 'sidebar'
+      return { type: 'Menu', items, side, children: [] }
     }
     // A visualization bound to a source: [Table -> Schedule], [Counter -> ...] etc.
     // A leading CRUD prefix (cudTable) makes the table interactive. A trailing
@@ -307,9 +313,29 @@ function parseNodeInner(line: string): Node {
     if (first === 'group') {
       return { type: 'Group', field: content.trim(), children: [] }
     }
+    // A [Chart] sub-directive selecting the chart kind: [Kind] bar|line|pie|donut.
+    if (first === 'kind') {
+      return { type: 'Kind', kind: content.trim().toLowerCase() || 'bar', children: [] }
+    }
+    // Viewer-facing [Table] controls: [Search] (optional placeholder text) renders
+    // a text box that live-filters rows across all columns; [Filter] Field renders
+    // a distinct-value dropdown. Both narrow the rows client-side (before sort/foot).
+    if (first === 'search') {
+      return { type: 'Search', placeholder: content.trim(), children: [] }
+    }
+    if (first === 'filter') {
+      return { type: 'Filter', field: content.trim(), children: [] }
+    }
     // A button that opens a form: [Button -> Event] New Event.
     if (first === 'button') {
       return { type: 'Button', label: content, target: innerSource ? innerSource.toLowerCase() : null, children: [] }
+    }
+    // A per-row action button inside a [Table]/[Cases]: [RowButton -> Action] Label
+    // (alias [RowAction]). Parses exactly like [Button] — `-> Target` names an
+    // [Action], the trailing text is the label — but the renderer draws it once per
+    // row with THAT row bound as `this`.
+    if (first === 'rowbutton' || first === 'rowaction') {
+      return { type: 'RowButton', label: content, target: innerSource ? innerSource.toLowerCase() : null, children: [] }
     }
     // A button that opens the user-management window: [User Management] Label.
     if (lowerInner === 'user management' || lowerInner === 'usermanagement') {

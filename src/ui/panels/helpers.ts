@@ -1,7 +1,11 @@
-import type { Node, FormNode, ButtonNode, ActionNode, MenuNode } from '../../fmd/types'
+import type { Node, FormNode, ButtonNode, RowButtonNode, ActionNode, MenuNode } from '../../fmd/types'
+
+// [Button] and [RowButton] share the same label/target shape, so button matchers
+// accept either.
+type ClickNode = ButtonNode | RowButtonNode
 
 // Match a clicked [Button] to a [Form] by its label, then its -> target.
-export function matchForm(forms: FormNode[], btn: ButtonNode | null): FormNode | null {
+export function matchForm(forms: FormNode[], btn: ClickNode | null): FormNode | null {
   if (!btn || !forms.length) return null
   const label = (btn.label || '').toLowerCase()
   const target = (btn.target || '').toLowerCase()
@@ -13,7 +17,7 @@ export function matchForm(forms: FormNode[], btn: ButtonNode | null): FormNode |
 
 // Match a clicked [Button] to an [Action] by its -> target, then its label.
 // Actions take precedence over forms (checked first in FormButton).
-export function matchAction(actions: Record<string, ActionNode>, btn: ButtonNode | null): ActionNode | null {
+export function matchAction(actions: Record<string, ActionNode>, btn: ClickNode | null): ActionNode | null {
   if (!btn || !actions) return null
   const target = (btn.target || '').toLowerCase()
   const label = (btn.label || '').toLowerCase()

@@ -138,25 +138,42 @@ body {
 .viz-table th, .viz-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
 .viz-table th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
 .viz-table td.row-action, .viz-table th.row-action { width: 28px; text-align: center; }
+/* per-row [RowButton] action column: tight, right-aligned, compact buttons */
+.viz-table td.row-actions, .viz-table th.row-actions,
+.cases-list td.row-actions, .cases-list th.row-actions { width: 1%; white-space: nowrap; text-align: right; }
+.row-actions .fmd-button { margin: 0 0 0 6px; padding: 4px 10px; font-size: 12px; }
+.row-actions .fmd-button:first-child { margin-left: 0; }
 .viz-table .cell-text { display: inline-block; max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
 .viz-table tfoot td, .viz-table tr.subtotal td { font-weight: 600; border-top: 2px solid var(--line); }
 .viz-table tr.grand-total td { color: var(--text); }
 .viz-table tr.subtotal td { color: var(--muted); border-bottom: 1px solid var(--line); }
 .viz-table tr.group-head td { background: var(--panel, rgba(255,255,255,.03)); color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
 .viz-table tr.group-head .group-count { display: inline-block; margin-left: 8px; padding: 0 6px; border-radius: 8px; background: var(--line); color: var(--text); font-size: 10px; }
+/* viewer-facing [Search]/[Filter] controls above a table */
+.viz-controls { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; align-items: center; }
+.viz-search, .viz-filter {
+  padding: 6px 10px; background: var(--panel, #1a1a1a); color: var(--text);
+  border: 1px solid var(--line); border-radius: 6px; font: inherit; font-size: 13px; outline: none;
+}
+.viz-search { flex: 1 1 180px; min-width: 140px; }
+.viz-search::placeholder { color: var(--muted); }
+.viz-search:focus, .viz-filter:focus { box-shadow: 0 0 0 1px var(--accent); border-color: var(--accent); }
+.viz-filter {
+  -webkit-appearance: none; appearance: none; cursor: pointer; padding-right: 26px;
+  background-color: var(--bg);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M1 1l4 4 4-4' fill='none' stroke='%239aa0bd' stroke-width='1.5' stroke-linecap='round'/></svg>");
+  background-repeat: no-repeat; background-position: right 10px center;
+}
+.viz-filter option { background: var(--panel); color: var(--text); }
 .detail { display: flex; flex-direction: column; gap: 12px; }
 /* [Cases]: a table whose first column links to the record's drill-in "case" */
 .cases-link { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-align: left; }
 .cases-link:hover { text-decoration: underline; }
 .cases-case { display: flex; flex-direction: column; gap: 16px; }
-/* a case opened as its OWN page (no menu, only Back). It's a .fmd-display, so the
-   case content formats like a [Display]; the body supplies the page padding. */
+/* a case opened as its OWN page (no menu, only Back). It IS a .fmd-display and
+   renders its children exactly like a [Display] — the only addition is the Back
+   bar in place of the menu. */
 .case-back-bar { padding: 14px 24px 0; }
-.case-page-body { padding: 8px 26px 26px; display: flex; flex-direction: column; gap: 16px; }
-.case-page-body > .fmd-title { padding-left: 0; padding-right: 0; } /* heading padded by body */
-.case-page-body > .fmd-main { padding: 0; }                          /* [Main] inside a case: body pads it */
-.cases-case-head { display: flex; align-items: center; gap: 12px; }
-.cases-case-title { margin: 0; font-size: 20px; font-weight: 700; color: var(--heading, var(--text)); }
 .cases-back { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; font-size: 13px; }
 .cases-back:hover { border-color: var(--accent); }
 .fmd-view .detail-fields { margin-top: 4px; }
@@ -221,6 +238,20 @@ select.cell-input option { background: var(--panel); color: var(--text); }
 .board-col-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
 .board-count { background: var(--line); border-radius: 999px; padding: 0 7px; font-size: 11px; }
 .board-card { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 13px; margin-bottom: 6px; }
+
+/* chart ([Chart -> Src] Label / Value, [Kind] bar|line|pie|donut) */
+.viz-chart { width: 100%; }
+.viz-chart .chart-svg { width: 100%; height: auto; display: block; overflow: visible; }
+.viz-chart .chart-axis { stroke: var(--line); stroke-width: 1; }
+.viz-chart .chart-value { fill: var(--text); font-size: 10px; font-variant-numeric: tabular-nums; }
+.viz-chart .chart-label { fill: var(--muted); font-size: 10px; }
+.viz-chart.chart-pie { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.viz-chart.chart-pie .chart-svg { flex: 0 0 180px; max-width: 180px; }
+.chart-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; min-width: 140px; flex: 1; }
+.chart-legend li { display: flex; align-items: center; gap: 8px; }
+.chart-swatch { width: 12px; height: 12px; border-radius: 3px; flex: 0 0 auto; }
+.chart-legend-label { color: var(--text); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chart-legend-val { color: var(--muted); font-variant-numeric: tabular-nums; }
 
 /* calendar */
 .calendar { font-size: 12px; }
@@ -640,7 +671,46 @@ table td.muted-cell { padding: 22px 10px; opacity: .8; text-align: center; }
 .fmd-menu button:hover { color: var(--text); }
 .fmd-menu button.active { color: var(--text); border-bottom-color: var(--accent); }
 
+/* [SideMenu]: a vertical nav rail down the left of the page instead of a top
+   tab bar. The display becomes a two-column shell (rail + content). */
+.fmd-display.has-side-menu { display: flex; align-items: stretch; }
+.fmd-side-rail {
+  flex: 0 0 190px; min-width: 0;
+  border-right: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg) 45%, var(--panel));
+}
+.fmd-page-content { flex: 1 1 auto; min-width: 0; }
+.fmd-side-menu {
+  flex-direction: column; flex-wrap: nowrap; gap: 2px;
+  padding: 16px 12px; border-bottom: 0;
+  position: sticky; top: 0;
+}
+.fmd-side-menu button {
+  text-align: left; border-radius: 8px; padding: 10px 12px; margin: 0;
+  border-bottom: 0; border-left: 2px solid transparent;
+}
+.fmd-side-menu button.active {
+  border-bottom-color: transparent; border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
 .fmd-main { display: flex; flex-direction: column; gap: 18px; padding: 24px 26px; }
+
+/* Loose content placed directly under a [Display] / case page — i.e. NOT wrapped
+   in a [Main] — still gets the page inset + vertical rhythm, so it aligns with
+   the [Title] and reads like content inside [Main]. (Structural children — the
+   title, menu, main, back bar, app-name — own their own spacing and are not
+   matched here. Content inside a [Main] is `.fmd-main > …`, also unaffected.) */
+.fmd-display > .fmd-text,
+.fmd-display > .detail,
+.fmd-display > .fmd-list,
+.fmd-display > .action-bar,
+.fmd-display > .widget-row,
+.fmd-display > .summary,
+.fmd-display > .board,
+.fmd-display > .calendar { margin: 0 26px 18px; }
+.fmd-display > .fmd-button { margin: 0 0 18px 26px; }
+.fmd-display > .fmd-button + .fmd-button { margin-left: 8px; } /* group loose buttons */
 
 .widget-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; }
 
@@ -750,10 +820,25 @@ table td.muted-cell { padding: 22px 10px; opacity: .8; text-align: center; }
   .preview-scroll { padding: 14px; }
   .published { padding: 14px 12px; }
   .fmd-main { padding: 14px 12px; gap: 14px; }
+  /* loose content uses the tighter mobile inset (matches .fmd-main) */
+  .fmd-display > .fmd-text,
+  .fmd-display > .detail,
+  .fmd-display > .fmd-list,
+  .fmd-display > .action-bar,
+  .fmd-display > .widget-row,
+  .fmd-display > .summary,
+  .fmd-display > .board,
+  .fmd-display > .calendar { margin-left: 12px; margin-right: 12px; }
+  .fmd-display > .fmd-button { margin-left: 12px; }
   .app-name { font-size: 22px; }
   .fmd-menu { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  /* a [SideMenu] collapses to a horizontal strip on top on narrow screens */
+  .fmd-display.has-side-menu { flex-direction: column; }
+  .fmd-side-rail { flex-basis: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+  .fmd-side-menu { flex-direction: row; overflow-x: auto; position: static; padding: 0 12px; }
+  .fmd-side-menu button { border-left: 0; border-bottom: 2px solid transparent; border-radius: 0; }
+  .fmd-side-menu button.active { border-left-color: transparent; border-bottom-color: var(--accent); background: none; }
   .case-back-bar { padding: 12px 14px 0; }
-  .case-page-body { padding: 6px 14px 18px; }
 
   /* one column for widget rows, form fields, and detail fields */
   .widget-row { grid-template-columns: 1fr; }
@@ -762,9 +847,43 @@ table td.muted-cell { padding: 22px 10px; opacity: .8; text-align: center; }
   .form-field { grid-column: span 1 !important; } /* override declared widths */
   .stat-grid { grid-template-columns: 1fr 1fr; }
 
-  /* wide tables scroll horizontally rather than squishing */
-  .viz-table { min-width: max-content; }
-  .fmd-list { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  /* Responsive tables: instead of a wide table that runs off-screen, each row
+     collapses into a labeled card (the column header comes from the cell's
+     data-label). Keeps everything on-screen with no horizontal scrolling. */
+  .viz-table, .fmd-list table { min-width: 0; }
+  .viz-table thead, .fmd-list table thead { display: none; }
+  .viz-table tbody tr, .fmd-list table tbody tr {
+    display: block; margin: 0 0 8px; padding: 2px 0;
+    border: 1px solid var(--line); border-radius: 10px; background: var(--panel-2);
+  }
+  .viz-table tbody td, .fmd-list table tbody td {
+    display: flex; align-items: center; justify-content: space-between; gap: 14px;
+    padding: 8px 12px; border: 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+    text-align: right; max-width: none;
+  }
+  .viz-table tbody tr td:last-child, .fmd-list table tbody tr td:last-child { border-bottom: 0; }
+  .viz-table tbody td::before, .fmd-list table tbody td::before {
+    content: attr(data-label); flex: 0 0 auto; margin-right: auto;
+    color: var(--muted); font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .04em; text-align: left;
+  }
+  /* let values wrap/right-align instead of being ellipsis-clamped in a flex cell */
+  .viz-table .cell-text { max-width: none; white-space: normal; text-align: right; }
+  .cases-list .cases-link { text-align: right; }
+  /* section / subtotal / total / empty rows span full width, no label:value split */
+  .viz-table tbody tr.group-head, .viz-table tbody tr.subtotal { padding: 0; }
+  .viz-table tr.group-head td, .viz-table tr.subtotal td, .viz-table tfoot td,
+  .viz-table td.muted-cell, .fmd-list td.muted-cell { display: block; text-align: left; border-bottom: 0; }
+  .viz-table tr.group-head td::before, .viz-table tr.subtotal td::before, .viz-table tfoot td::before,
+  .viz-table td.muted-cell::before, .fmd-list td.muted-cell::before { content: none; }
+  .viz-table td.row-action { justify-content: flex-end; }
+  .viz-table td.row-action::before { content: none; }
+  /* row-action buttons: a right-aligned button row, no data-label prefix */
+  .viz-table td.row-actions, .fmd-list td.row-actions { justify-content: flex-end; flex-wrap: wrap; }
+  .viz-table td.row-actions::before, .fmd-list td.row-actions::before { content: none; }
+  /* create ("+") row: labeled inputs, each on its own line, input filling the row */
+  .viz-table tbody tr.new-row .cell-input, .viz-table tbody tr.new-row .num-input,
+  .viz-table tbody tr.new-row select { min-width: 58%; text-align: left; }
 
   /* modals nearly full-width; forms can use more vertical space */
   .modal { width: 94vw; }
@@ -774,7 +893,7 @@ table td.muted-cell { padding: 22px 10px; opacity: .8; text-align: center; }
   .um-form-row { grid-template-columns: 1fr; }
 
   /* 16px inputs stop iOS from auto-zooming the page on focus */
-  .form-input, .cell-input, select.cell-input, .code-input, .detail-picker { font-size: 16px; }
+  .form-input, .cell-input, select.cell-input, .code-input, .detail-picker, .viz-search, .viz-filter { font-size: 16px; }
 }
 
 /* ================================================================== */
@@ -817,7 +936,14 @@ table td.muted-cell { padding: 22px 10px; opacity: .8; text-align: center; }
 /* let the content column own the padding/spacing; reset inner shells */
 .mobile-app .fmd-main { padding: 0; gap: 16px; }
 .mobile-app .fmd-display { padding: 0; gap: 16px; }
-.mobile-app .case-page-body { padding: 0; }
+/* the mobile shell's content column owns the padding — loose content sits flush */
+.mobile-app .fmd-display > .fmd-text,
+.mobile-app .fmd-display > .detail,
+.mobile-app .fmd-display > .fmd-list,
+.mobile-app .fmd-display > .action-bar,
+.mobile-app .fmd-display > .widget-row,
+.mobile-app .fmd-display > .summary,
+.mobile-app .fmd-display > .fmd-button { margin-left: 0; margin-right: 0; }
 .mobile-app .case-back-bar { padding: 0 0 4px; }
 .mobile-app .widget-row { grid-template-columns: 1fr; gap: 14px; }
 .mobile-app .stat-grid { grid-template-columns: 1fr 1fr; }

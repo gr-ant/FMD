@@ -173,12 +173,15 @@ export function LinkSelect({ value, link, onCommit }: LinkSelectProps) {
 // The faux bottom row for [cTable]: type/pick across the cells, Enter (or +) adds.
 type NewRowProps = {
   source: string
-  cols: { key: string }[]
+  cols: { key: string; name?: string }[]
   fields: Field[]
   extraCol?: boolean
+  // A trailing empty cell to align under a [RowButton] actions column, so the
+  // create ("+") row keeps the same column count as the data rows.
+  extraActionCol?: boolean
   onAdded: () => void
 }
-export function NewRow({ source, cols, fields, extraCol, onAdded }: NewRowProps) {
+export function NewRow({ source, cols, fields, extraCol, extraActionCol, onAdded }: NewRowProps) {
   const [vals, setVals] = useState<FmdRecord>({})
   const base = useApiBase()
   const add = () => {
@@ -192,7 +195,7 @@ export function NewRow({ source, cols, fields, extraCol, onAdded }: NewRowProps)
   return (
     <tr className="new-row">
       {cols.map((c, ci) => (
-        <td key={ci}>
+        <td key={ci} data-label={c.name}>
           <NewCell field={fieldDef(fields, c.key)} first={ci === 0}
             value={vals[c.key] || ''}
             onChange={(val) => setVals((s) => ({ ...s, [c.key]: val }))}
@@ -200,6 +203,7 @@ export function NewRow({ source, cols, fields, extraCol, onAdded }: NewRowProps)
         </td>
       ))}
       {extraCol && <td className="row-action"><button className="add-btn-sm" title="Add row" onClick={add}>+</button></td>}
+      {extraActionCol && <td className="row-actions" />}
     </tr>
   )
 }

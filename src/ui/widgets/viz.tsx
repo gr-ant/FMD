@@ -10,7 +10,7 @@ import { evalExpr } from '../../fmd/calc'
 import { formatValue, fieldDef, fieldType } from '../../fmd/format'
 import { EditableCell, NewRow } from './inputs'
 import { classify, Checklist, Empty } from './shared'
-import { FormButton } from './forms'
+import { FormButton, spanOf } from './forms'
 import { apiFetch, dataBase } from '../../state/auth'
 import type {
   Node,
@@ -20,7 +20,11 @@ import type {
   CasesNode,
   ViewNode,
   ButtonNode,
+  RowButtonNode,
   FootNode,
+  KindNode,
+  SearchNode,
+  FilterNode,
   ItemNode,
   Field,
   FieldType,
@@ -104,6 +108,7 @@ export function Viz({ node }: { node: Node }): React.ReactNode {
     case 'slider': return <VizSlider node={node} />
     case 'board': return <VizBoard node={node} />
     case 'calendar': return <VizCalendar node={node} />
+    case 'chart': return <VizChart node={node} />
     default: return null
   }
 }
@@ -166,11 +171,42 @@ function VizTable({ node }: { node: VizNode }): React.ReactNode {
   const fields = useFields(node.source)
   const refresh = useRefresh()
   const base = useApiBase()
+  // Viewer-facing [Search]/[Filter] controls narrow the rows client-side (before
+  // the author's sort/group/foot passes). Their state lives here on the table.
+  const [query, setQuery] = useState('')
+  const [selections, setSelections] = useState<Record<string, string>>({})
+  const searchNode = node.children.find((c): c is SearchNode => c.type === 'Search')
+  const filterNodes = node.children.filter((c): c is FilterNode => c.type === 'Filter')
   if (!rows) return <Empty source={node.source} />
 
   const cols = node.spec
     ? node.spec.split(',').map((s) => resolveField(fields, rows, s)).filter((c) => c.name)
     : keysOf(rows).filter((k) => k !== '_id').map((k) => ({ name: k, key: k, ok: true }))
+
+  // ---- viewer controls: [Search] + [Filter] (applied before sort/group/foot) --
+  // Each [Filter] resolves to a column key plus the distinct display values of
+  // the loaded rows (deduped, original order) for its dropdown.
+  const hasControls = !!searchNode || filterNodes.length > 0
+  const filters = filterNodes.map((f) => {
+    const rf = resolveField(fields, rows, f.field)
+    const type = fieldType(fields, rf.key)
+    const values: string[] = []
+    const seen = new Set<string>()
+    rows.forEach((r) => {
+      const disp = rf.key ? String(formatValue(r[rf.key], type)) : ''
+      if (disp !== '' && !seen.has(disp)) { seen.add(disp); values.push(disp) }
+    })
+    return { field: rf.name, key: rf.key, type, values, selected: selections[rf.name] || '' }
+  })
+  const q = query.trim().toLowerCase()
+  const filtering = hasControls && (!!q || filters.some((f) => f.selected))
+  if (q) {
+    rows = rows.filter((r) =>
+      cols.some((c) => c.key && String(formatValue(r[c.key], fieldType(fields, c.key))).toLowerCase().includes(q)))
+  }
+  for (const f of filters) {
+    if (f.selected && f.key) rows = rows.filter((r) => String(formatValue(r[f.key], f.type)) === f.selected)
+  }
 
   // CRUD controls appear only when the author enabled them (tag prefix) AND the
   // user's role is permitted the verb — so a viewer never sees add/edit/delete.
@@ -179,7 +215,12 @@ function VizTable({ node }: { node: VizNode }): React.ReactNode {
   const canCreate = crud.includes('c') && permits.create
   const canUpdate = crud.includes('u') && permits.update
   const canDelete = crud.includes('d') && permits.delete
-  const span = cols.length + (canDelete ? 1 : 0)
+  // Per-row action buttons ([RowButton]/[RowAction]) render in a trailing actions
+  // column, one button per declared row-button per row. Additive: with none, the
+  // table renders exactly as before.
+  const rowButtons = node.children.filter((c): c is RowButtonNode => c.type === 'RowButton')
+  const hasRowActions = rowButtons.length > 0
+  const span = cols.length + (canDelete ? 1 : 0) + (hasRowActions ? 1 : 0)
   const api = (path: string, opts?: RequestInit): Promise<void> =>
     apiFetch(`${dataBase(base, node.source)}${path}`, opts).then(refresh)
 
@@ -233,6 +274,7 @@ function VizTable({ node }: { node: VizNode }): React.ReactNode {
         )
       })}
       {canDelete && <td className="row-action" />}
+      {hasRowActions && <td className="row-actions" />}
     </tr>
   )
 
@@ -241,7 +283,7 @@ function VizTable({ node }: { node: VizNode }): React.ReactNode {
       {cols.map((c, ci) => {
         const def = fieldDef(fields, c.key)
         return (
-          <td key={ci}>
+          <td key={ci} data-label={c.name}>
             {def?.rollup
               ? <RollupCell parentRow={r} def={def} parentSource={node.source} type={def.type} />
               : def?.lookup
@@ -257,6 +299,17 @@ function VizTable({ node }: { node: VizNode }): React.ReactNode {
       {canDelete && (
         <td className="row-action">
           {r._id != null && <button className="del-btn" title="Delete row" onClick={() => remove(r)}>×</button>}
+        </td>
+      )}
+      {hasRowActions && (
+        // Wrap this row's buttons in a RecordContext bound to THAT row, so
+        // FormButton's useCase() resolves to this record — reusing the existing
+        // action-run + destructive-confirm + `this`-binding machinery. run()
+        // refreshes the data on completion, so the table re-fetches automatically.
+        <td className="row-actions">
+          <RecordContext.Provider value={{ record: r, source: node.source }}>
+            {rowButtons.map((b, bi) => <FormButton key={bi} node={b} compact />)}
+          </RecordContext.Provider>
         </td>
       )}
     </tr>
@@ -287,23 +340,51 @@ function VizTable({ node }: { node: VizNode }): React.ReactNode {
   }
 
   return (
-    // wrapper lets a wide table scroll horizontally instead of overflowing on
-    // narrow (mobile) screens.
-    <div className="viz-table-wrap">
+    <>
+      {hasControls && (
+        <div className="viz-controls">
+          {searchNode && (
+            <input
+              className="viz-search"
+              type="text"
+              value={query}
+              placeholder={searchNode.placeholder || 'Search…'}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          )}
+          {filters.map((f, i) => (
+            <select
+              key={i}
+              className="viz-filter"
+              value={f.selected}
+              onChange={(e) => setSelections((s) => ({ ...s, [f.field]: e.target.value }))}
+            >
+              <option value="">All {f.field}</option>
+              {f.values.map((v, vi) => <option key={vi} value={v}>{v}</option>)}
+            </select>
+          ))}
+        </div>
+      )}
+      {/* wrapper lets a wide table scroll horizontally instead of overflowing on
+          narrow (mobile) screens. */}
+      <div className="viz-table-wrap">
       <table className="viz-table">
         <thead>
-          <tr>{cols.map((c, i) => <th key={i}>{c.name}</th>)}{canDelete && <th className="row-action" />}</tr>
+          <tr>{cols.map((c, i) => <th key={i}>{c.name}</th>)}{canDelete && <th className="row-action" />}{hasRowActions && <th className="row-actions" />}</tr>
         </thead>
         <tbody>
           {rows.length === 0 && !canCreate && (
-            <tr><td colSpan={cols.length + (canDelete ? 1 : 0) || 1} className="muted-cell">◌&ensp;no records in “{node.source}” yet</td></tr>
+            <tr><td colSpan={span || 1} className="muted-cell">
+              {filtering ? '◌ no matches' : <>◌&ensp;no records in “{node.source}” yet</>}
+            </td></tr>
           )}
           {body}
-          {canCreate && !group && <NewRow source={node.source} cols={cols} fields={fields} extraCol={canDelete} onAdded={refresh} />}
+          {canCreate && !group && <NewRow source={node.source} cols={cols} fields={fields} extraCol={canDelete} extraActionCol={hasRowActions} onAdded={refresh} />}
         </tbody>
         {footSpecs.length > 0 && <tfoot>{footRow(rows, 'grand-total')}</tfoot>}
       </table>
-    </div>
+      </div>
+    </>
   )
 }
 
@@ -516,6 +597,12 @@ export function VizCases({ node }: { node: CasesNode }): React.ReactNode {
   const cell = (r: FmdRecord, key: string | null): React.ReactNode =>
     <DetailValue record={r} def={fieldDef(fields, key)} fields={fields} source={node.source} />
 
+  // Per-row action buttons in the LIST: a trailing actions column, one button per
+  // [RowButton] per row. They're excluded from the case-page children below so they
+  // render only in the list, not again on the opened case.
+  const rowButtons = node.children.filter((c): c is RowButtonNode => c.type === 'RowButton')
+  const hasRowActions = rowButtons.length > 0
+
   // An indented [Sort] orders the list (the rest of the children are case content).
   const sort = node.children.find((c) => c.type === 'Sort')
   if (sort && sort.type === 'Sort' && sort.field) {
@@ -529,52 +616,47 @@ export function VizCases({ node }: { node: CasesNode }): React.ReactNode {
   }
 
   const openCase = (r: FmdRecord): void => nav.open({
-    record: r, source: node.source, children: node.children,
+    record: r, source: node.source, children: node.children.filter((c) => c.type !== 'RowButton'),
     title: cols[0] ? String(r[cols[0].key ?? ''] ?? `#${r._id}`) : `#${r._id}`,
   })
 
   return (
     <div className="fmd-list cases-list">
       <table>
-        <thead><tr>{cols.map((c, i) => <th key={i}>{c.name}</th>)}</tr></thead>
+        <thead><tr>{cols.map((c, i) => <th key={i}>{c.name}</th>)}{hasRowActions && <th className="row-actions" />}</tr></thead>
         <tbody>
           {rows.map((r, ri) => (
             <tr key={ri}>
               {cols.map((c, ci) => (
-                <td key={ci}>
+                <td key={ci} data-label={c.name}>
                   {ci === 0
                     ? <button className="cases-link" onClick={() => openCase(r)}>{cell(r, c.key)}</button>
                     : cell(r, c.key)}
                 </td>
               ))}
+              {hasRowActions && (
+                <td className="row-actions">
+                  <RecordContext.Provider value={{ record: r, source: node.source }}>
+                    {rowButtons.map((b, bi) => <FormButton key={bi} node={b} compact />)}
+                  </RecordContext.Provider>
+                </td>
+              )}
             </tr>
           ))}
-          {rows.length === 0 && <tr><td colSpan={cols.length || 1} className="muted-cell">◌&ensp;no records in “{node.source}” yet</td></tr>}
+          {rows.length === 0 && <tr><td colSpan={(cols.length + (hasRowActions ? 1 : 0)) || 1} className="muted-cell">◌&ensp;no records in “{node.source}” yet</td></tr>}
         </tbody>
       </table>
     </div>
   )
 }
 
-// Collapse consecutive button-like children into a shared row so a case page's
-// actions sit inline (an action bar) instead of each button stretching full
-// width down the page. Non-button nodes pass through untouched, preserving order.
-function groupButtons(children: Node[]): (Node | Node[])[] {
-  const out: (Node | Node[])[] = []
-  let run: Node[] | null = null
-  for (const c of children) {
-    if (c.type === 'Button' || c.type === 'UserManagement') { (run ||= []).push(c) }
-    else { if (run) { out.push(run); run = null } out.push(c) }
-  }
-  if (run) out.push(run)
-  return out
-}
-
-// A case rendered as its OWN full page — NO menu, escapable only via ← Back. It
-// uses the `.fmd-display` shell so you format the case like a [Display]: put a
-// [Title], [Main], ((Card))s, etc. under the [Cases] and they render as a page.
-// Children render with `this` bound to the record + a RecordContext so
-// [View]/[[field]]/case-scoped buttons work.
+// A case rendered as its OWN full page. It renders EXACTLY like a [Display]
+// (same `.fmd-display` shell, children rendered directly), except the top nav is
+// a "← Back" bar instead of the menu — so authoring a case is authoring a page:
+// put a [Title], [Main], ((Card))s, [View], [Button]s under the [Cases] and they
+// render identically to the same content in a [Display]. Children render with
+// `this` bound to the record + a RecordContext so [View]/[[field]]/case-scoped
+// buttons resolve against the case's record.
 export function CasePage({ caseView, onBack }: { caseView: OpenCaseValue; onBack: () => void }): React.ReactNode {
   const { record, source, children } = caseView
   return (
@@ -583,13 +665,7 @@ export function CasePage({ caseView, onBack }: { caseView: OpenCaseValue; onBack
         <div className="case-back-bar">
           <button className="cases-back" onClick={onBack}>← Back</button>
         </div>
-        <div className="case-page-body">
-          {groupButtons(children).map((g, i) =>
-            Array.isArray(g)
-              ? <div className="action-bar" key={i}>{g.map((c, j) => <Renderer key={j} node={bindThis(c, record)} />)}</div>
-              : <Renderer key={i} node={bindThis(g, record)} />,
-          )}
-        </div>
+        {children.map((c, i) => <Renderer key={i} node={bindThis(c, record)} />)}
       </div>
     </RecordContext.Provider>
   )
@@ -604,12 +680,15 @@ export function VizView({ node }: { node: ViewNode }): React.ReactNode {
   const fields = useFields(form?.source ?? null)
   if (!form) return <div className="detail"><div className="muted-cell">unknown form “{node.form}”</div></div>
   const rec = record || {}
+  // Lay the read-only fields out on the SAME 3-column width grid as the form
+  // modal, so declared 1/2/3 widths render identically in the panel.
+  const hasWidths = form.fields.some((f) => f.width)
   return (
     <div className="detail fmd-view">
       {node.label && <div className="section-label">{node.label}</div>}
-      <div className="detail-fields">
+      <div className={`detail-fields${hasWidths ? ' detail-grid3' : ''}`}>
         {form.fields.map((f, i) => (
-          <div className="detail-field" key={i}>
+          <div className="detail-field" key={i} style={hasWidths ? { gridColumn: `span ${spanOf(f.width)}` } : undefined}>
             <span className="detail-label">{f.label}</span>
             <span className="detail-value"><DetailValue record={rec} def={fieldDef(fields, fieldName(f.field))} fields={fields} source={form.source} /></span>
           </div>
@@ -720,6 +799,153 @@ function VizCalendar({ node }: { node: VizNode }): React.ReactNode {
           </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+// An aggregated (label, value) point feeding a chart.
+type ChartPoint = { label: string; value: number }
+
+// A palette of accent-derived hues for pie/donut slices and the legend. Hue
+// sweeps from the teal accent toward warm tones so slices stay on-theme.
+const chartColor = (i: number, n: number): string =>
+  `hsl(${Math.round(162 - (i / Math.max(1, n)) * 210)}, 62%, 56%)`
+
+// A pie/donut slice path. `inner > 0` cuts a ring (donut); inner === 0 is a full
+// wedge (pie). Angles are radians, clockwise from the given start.
+function slicePath(cx: number, cy: number, r: number, inner: number, a0: number, a1: number): string {
+  const pt = (a: number, rad: number): [number, number] => [cx + rad * Math.cos(a), cy + rad * Math.sin(a)]
+  const large = a1 - a0 > Math.PI ? 1 : 0
+  const [ox0, oy0] = pt(a0, r), [ox1, oy1] = pt(a1, r)
+  if (inner <= 0) return `M ${cx} ${cy} L ${ox0} ${oy0} A ${r} ${r} 0 ${large} 1 ${ox1} ${oy1} Z`
+  const [ix1, iy1] = pt(a1, inner), [ix0, iy0] = pt(a0, inner)
+  return `M ${ox0} ${oy0} A ${r} ${r} 0 ${large} 1 ${ox1} ${oy1} L ${ix1} ${iy1} A ${inner} ${inner} 0 ${large} 0 ${ix0} ${iy0} Z`
+}
+
+// A declarative chart bound to a source: `[Chart -> Sales] Month / Total` with an
+// indented `[Kind] bar|line|pie|donut` (bar is the default). Reads the bound
+// rows, aggregates the numeric value by the label field (summing duplicate
+// labels), honors an indented `[Sort]`, and renders dependency-free inline SVG.
+function VizChart({ node }: { node: VizNode }): React.ReactNode {
+  const rows = filterRows(useSource(node.source), node.filter, useRules())
+  const fields = useFields(node.source)
+  if (!rows) return <Empty source={node.source} />
+  const [labelRef, valueRef] = (node.spec || '').split('/').map((s) => s.trim())
+  const label = resolveField(fields, rows, labelRef)
+  const value = resolveField(fields, rows, valueRef)
+
+  // Aggregate the numeric value by label, summing duplicate labels.
+  const order: string[] = []
+  const sums = new Map<string, number>()
+  rows.forEach((r) => {
+    const l = label.key ? String(r[label.key] ?? '') : ''
+    const v = value.key ? Number(r[value.key]) : NaN
+    if (!sums.has(l)) { sums.set(l, 0); order.push(l) }
+    sums.set(l, sums.get(l) + (Number.isFinite(v) ? v : 0))
+  })
+  let points: ChartPoint[] = order.map((l) => ({ label: l || '—', value: sums.get(l) }))
+
+  // An indented [Sort] orders the points — by value when it names the value
+  // field, otherwise alphabetically by label.
+  const sort = node.children.find((c) => c.type === 'Sort')
+  if (sort && sort.type === 'Sort') {
+    const dir = sort.dir === 'desc' ? -1 : 1
+    const byValue = !!sort.field && resolveField(fields, rows, sort.field).key === value.key
+    points = [...points].sort((a, b) =>
+      byValue ? (a.value - b.value) * dir : a.label.localeCompare(b.label) * dir)
+  }
+
+  if (!points.length) return <Empty source={node.source} />
+
+  // The chart kind from an indented [Kind]; default bar.
+  const kindNode = node.children.find((c): c is KindNode => c.type === 'Kind')
+  const kind = kindNode?.kind || 'bar'
+  const fmt = (v: number): string => String(formatValue(v, fieldType(fields, value.key)))
+
+  if (kind === 'pie' || kind === 'donut') {
+    const total = points.reduce((a, p) => a + p.value, 0)
+    const R = 92, CX = 100, CY = 100, INNER = kind === 'donut' ? 52 : 0
+    let a = -Math.PI / 2
+    const slices = points.map((p, i) => {
+      const frac = total > 0 ? p.value / total : 0
+      const a0 = a, a1 = a + frac * Math.PI * 2
+      a = a1
+      return { p, i, color: chartColor(i, points.length), d: slicePath(CX, CY, R, INNER, a0, a1) }
+    })
+    return (
+      <div className="viz-chart chart-pie">
+        <svg viewBox="0 0 200 200" className="chart-svg" preserveAspectRatio="xMidYMid meet" role="img">
+          {total > 0
+            ? slices.map((s) => <path key={s.i} d={s.d} fill={s.color} stroke="var(--panel-2)" strokeWidth={1} />)
+            : <circle cx={CX} cy={CY} r={R} fill="var(--line)" />}
+        </svg>
+        <ul className="chart-legend">
+          {points.map((p, i) => (
+            <li key={i}>
+              <span className="chart-swatch" style={{ background: chartColor(i, points.length) }} />
+              <span className="chart-legend-label">{p.label}</span>
+              <span className="chart-legend-val">{fmt(p.value)}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    )
+  }
+
+  // ---- cartesian charts (bar, line): shared geometry ----
+  const W = 360, H = 200, padX = 12, padT = 20, padB = 34
+  const innerH = H - padT - padB
+  const n = points.length
+  const slot = (W - padX * 2) / n
+  const max = Math.max(0, ...points.map((p) => p.value))
+  const yOf = (v: number): number => padT + innerH - (max > 0 ? (v / max) * innerH : 0)
+  const baseY = padT + innerH
+
+  if (kind === 'line') {
+    const coords = points.map((p, i) => ({ x: padX + slot * i + slot / 2, y: yOf(p.value), p }))
+    const poly = coords.map((c) => `${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(' ')
+    return (
+      <div className="viz-chart chart-line">
+        <svg viewBox={`0 0 ${W} ${H}`} className="chart-svg" preserveAspectRatio="xMidYMid meet" role="img">
+          <line x1={padX} y1={baseY} x2={W - padX} y2={baseY} className="chart-axis" />
+          <polyline points={poly} fill="none" stroke="var(--accent)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+          {coords.map((c, i) => (
+            <g key={i}>
+              <circle cx={c.x} cy={c.y} r={3.5} fill="var(--accent-2)" />
+              <text x={c.x} y={c.y - 7} className="chart-value" textAnchor="middle">{fmt(c.p.value)}</text>
+              <text x={c.x} y={H - 12} className="chart-label" textAnchor="middle">{c.p.label}</text>
+            </g>
+          ))}
+        </svg>
+      </div>
+    )
+  }
+
+  // bar (default): vertical bars scaled to the max value.
+  const bw = Math.min(56, slot * 0.68)
+  return (
+    <div className="viz-chart chart-bar">
+      <svg viewBox={`0 0 ${W} ${H}`} className="chart-svg" preserveAspectRatio="xMidYMid meet" role="img">
+        <defs>
+          <linearGradient id="chart-bar-grad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--accent)" />
+            <stop offset="100%" stopColor="var(--accent-2)" />
+          </linearGradient>
+        </defs>
+        <line x1={padX} y1={baseY} x2={W - padX} y2={baseY} className="chart-axis" />
+        {points.map((p, i) => {
+          const x = padX + slot * i + (slot - bw) / 2
+          const y = yOf(p.value)
+          const h = Math.max(0, baseY - y)
+          return (
+            <g key={i}>
+              <rect x={x} y={y} width={bw} height={h} rx={3} fill="url(#chart-bar-grad)" />
+              <text x={x + bw / 2} y={y - 5} className="chart-value" textAnchor="middle">{fmt(p.value)}</text>
+              <text x={x + bw / 2} y={H - 12} className="chart-label" textAnchor="middle">{p.label}</text>
+            </g>
+          )
+        })}
+      </svg>
     </div>
   )
 }

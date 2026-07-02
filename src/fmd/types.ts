@@ -114,6 +114,7 @@ export interface AppNameNode extends BaseNode {
 export interface MenuNode extends BaseNode {
   type: 'Menu'
   items: string[]
+  side?: boolean // [SideMenu]/[Sidebar] -> a vertical rail instead of a top tab bar
 }
 
 // Legacy widget row: one or more (Name -> source) groups on a line.
@@ -165,7 +166,7 @@ export interface ApiNode extends BaseNode {
   want: string | null // optional natural-language hint of desired fields
 }
 
-// A visualization bound to a source ([Table -> X], [Counter -> Y], ...).
+// A visualization bound to a source ([Table -> X], [Counter -> Y], [Chart -> Z], ...).
 export interface VizNode extends BaseNode {
   type: 'Viz'
   viz: string
@@ -185,6 +186,15 @@ export interface ItemNode extends BaseNode {
 // A button that opens a form or runs an action.
 export interface ButtonNode extends BaseNode {
   type: 'Button'
+  label: string
+  target: string | null
+}
+
+// A per-row action button inside a [Table]/[Cases]: [RowButton -> Action] Label
+// (alias [RowAction]). Same label/target shape as [Button], but rendered once per
+// row in a trailing actions column, with THAT row bound as `this` when it runs.
+export interface RowButtonNode extends BaseNode {
+  type: 'RowButton'
   label: string
   target: string | null
 }
@@ -327,6 +337,26 @@ export interface GroupNode extends BaseNode {
   field: string
 }
 
+// A [Chart] sub-directive selecting the chart kind: bar | line | pie | donut.
+export interface KindNode extends BaseNode {
+  type: 'Kind'
+  kind: string
+}
+
+// A viewer-facing [Search] box above a table: live case-insensitive substring
+// match across every displayed column. `placeholder` is the optional inline text.
+export interface SearchNode extends BaseNode {
+  type: 'Search'
+  placeholder: string
+}
+
+// A viewer-facing [Filter] Field dropdown above a table: pick one of the field's
+// distinct values to narrow the rows (multiple [Filter]s are AND-ed).
+export interface FilterNode extends BaseNode {
+  type: 'Filter'
+  field: string
+}
+
 // A single-record view.
 export interface DetailNode extends BaseNode {
   type: 'Detail'
@@ -374,6 +404,7 @@ export type Node =
   | VizNode
   | ItemNode
   | ButtonNode
+  | RowButtonNode
   | FormNode
   | FormFieldNode
   | RuleNode
@@ -392,6 +423,9 @@ export type Node =
   | FootNode
   | SortNode
   | GroupNode
+  | KindNode
+  | SearchNode
+  | FilterNode
   | DetailNode
   | CasesNode
   | ViewNode

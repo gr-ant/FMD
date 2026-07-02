@@ -86,32 +86,42 @@ width and a **`[Colors]`** sub-block of color tags:
 ```
 
 **`[Font]`** — the app font. Keywords use built-in stacks (no download):
-`System`/`Sans`, `Serif`, `Mono`. Any other name is treated as a **Google Font**
-(e.g. `Inter`, `Poppins`, `Roboto`, `Lato`, `Merriweather`) and loaded
-automatically — an unknown name simply falls back to a sans-serif.
+`System`/`Sans`, `Serif`, `Mono`. There are also curated Google-Font names loaded
+automatically: `Inter`, `Roboto`, `Poppins`, `Lato`, `Montserrat`, `Nunito`,
+`Open Sans`, `Work Sans`, `Merriweather`, `Playfair Display`, `Source Code Pro`.
+Any other name is treated as a Google Font too — an unknown one simply falls back
+to a sans-serif.
 
 **`[Size]`** — the content width: **`Compact`** (~760px, narrow/reading),
-**`Standard`** (~1100px, the default), or **`Full`** (edge-to-edge, fills the screen).
+**`Standard`** (~1100px, the default), or **`Full`** (edge-to-edge, fills the
+screen). *(This app-wide `[Size]` differs from a `[Form]`'s own `[Size]`, which
+is `Compact`/`Standard`/`Wide` — see §8.)*
 
-**`[Colors]`** — each child tag maps to a theme role. Values can be a CSS color
-name (`White`), `#hex` (the `#` is fine here — it's not treated as a comment), or
-a bare hex (`ff5a5f`):
+**`[Colors]`** (aka **`[Palette]`** / **`[Theme]`**) wraps the color tags. The
+palette is deliberately **basic — six keys make a whole theme.** Values can be a
+CSS color name (`White`), a `#hex` (the `#` is fine here — it's not treated as a
+comment), or a bare hex (`ff5a5f`):
 
-| Tag | What it colors |
-|-----|----------------|
-| `[Primary]` | buttons, active tabs, links, the brand accent |
-| `[Secondary]` | secondary accents / highlights |
+| Canonical tag | What it colors |
+|---------------|----------------|
 | `[Background]` | the app page background |
-| `[Surface]` | panels, tables, menus — **and `( )` card interiors** |
-| `[Card]` | just the `( )` widget/card interior (so cards can differ from other surfaces) |
-| `[Text]` | primary body text |
-| `[Heading]` | prominent labels — the app name, page/list titles, KPI values |
-| `[Muted]` | secondary / subtle text (field labels, table headers, captions) |
-| `[ButtonText]` | the text **on** buttons (which sit on `[Primary]`) |
-| `[Border]` | borders and dividers |
+| `[Foreground]` | panels + card/widget interiors (the surfaces in front of the background) |
+| `[Text]` | body text — **auto-derives** muted text and headings from it |
+| `[Lines]` | borders and dividers |
+| `[Primary]` | buttons, active tabs, links, the brand accent — **auto-derives** button-text contrast (black vs. white) |
+| `[Secondary]` | the secondary accent / highlight |
 
-Set only the tags you want — anything omitted keeps the default dark theme. The
-style applies to the whole app subtree (no per-page styling yet).
+That's it — muted text, headings, and readable button text are computed from the
+six, so you rarely need more. Set only the tags you want; anything omitted keeps
+the default dark theme. The style applies to the whole app subtree (no per-page
+styling yet).
+
+> **See `THEMES.md` for 5 ready-made themes** you can paste in.
+
+**Back-compat aliases.** Older, finer-grained keys still work but the six above
+are canonical: `[Surface]` = `[Foreground]`; `[Card]`/`[Widget]` set just the
+card interior; `[Muted]`, `[Heading]`, `[ButtonText]`, and `[Border]` (= `[Lines]`)
+override the auto-derived values. Prefer the six basics for new configs.
 
 ## 2b. Variables — `[_Name] = value`
 
@@ -162,14 +172,26 @@ lists tab names; clicking a tab shows the `[Display]` whose name matches.
   your cue to add the page.
 - A single, unnamed `[Display]` (no name after it) also works, for a one-page app.
 
+**Vertical nav — `[SideMenu]`.** Swap `[Top Menu Bar]` for **`[SideMenu]`**
+(aliases `[Sidebar]`, `[Side Menu]`) to render the exact same comma-separated page
+list as a **vertical rail down the left**, with the page content in a right-hand
+column, instead of a top tab strip. On phones it collapses back to the tab strip
+automatically.
+
+```
+[SideMenu] Dashboard, Orders, Settings
+```
+
 **Recognized structural tags**
 
 | Tag | Meaning |
 |-----|---------|
 | `[App Name] text` | The app's global title (shown on top, above the pages). Renaming it **fully rewrites the database** — see §13. |
 | `[Display] Name` | A page. The root of what is rendered. |
-| `[Title] text` | A heading. |
+| `[Title] text` | A heading. Supports inline `**bold**` / `*italic*`. |
+| `[Text] text` | A paragraph of body text. Supports inline `**bold**` / `*italic*` (and `[[Field]]` in a case). |
 | `[Top Menu Bar] a, b, c` | Navigation tabs (also `[TopMenu]` / `[Menu]` / `[Nav]`). |
+| `[SideMenu] a, b, c` | A vertical left nav rail (also `[Sidebar]` / `[Side Menu]`). |
 | `[Main]` | The main content area (holds widget rows). |
 | `[Data]` | The data model. **Never rendered.** |
 | `[AnyOther]` | A generic container or labeled element. |
@@ -228,8 +250,9 @@ the same table as `[Table -> Schedule]` — any viz keyword works in parentheses
 column spec after the bracket (`[Table -> X] ColA, ColB`); the bare `( )` form
 shows all columns. Use a `((Card))` wrapper only to put a **titled card** around a
 view. A `(Name -> source)` whose name **isn't** a viz keyword (e.g.
-`(Inventory Counts -> inventory)`) is an auto-classified widget that picks a
-visualization from words in its name.
+`(Inventory Counts -> inventory)`) **doesn't render** — a view needs an explicit
+viz keyword. Write `(Counter -> inventory)` (or any of the seven keywords), not a
+bare descriptive name, to draw a visualization.
 
 ---
 
@@ -238,7 +261,9 @@ visualization from words in its name.
 A visualization is a `[Tag -> Source]` placed under a card. The **binding lives
 inside the brackets** (`-> Source`), and the source is an entity from `[Data]`.
 
-There are four. Each adapts to the records of its bound source.
+There are **six** core kinds — `table`, `counter`, `checklist`, `slider`,
+`board`, `calendar` — plus a seventh, **`[Chart]`** (below). Each adapts to the
+records of its bound source.
 
 ### `[Table -> Source] colA, colB`
 A table. The spec is the comma-separated **columns** to show. Shows every record.
@@ -263,6 +288,39 @@ A table. The spec is the comma-separated **columns** to show. Shows every record
   value. With a `[Foot]` present, each group also gets a **subtotal** row.
 - `[Foot] fn Field, …` — a footer of aggregates: `sum`/`avg`/`min`/`max Field`,
   or bare `count`. Each lands under its column; `count` sits in the first column.
+
+**Viewer search & filter.** Two more indented sub-directives add *reader-facing*
+controls above the table (they narrow the visible rows on the client, **before**
+sort/group/`[Foot]` — so subtotals reflect what's shown):
+
+```
+[Table -> Orders] Customer, Status, Total
+    [Search] Find an order…       # a text box; substring-matches ANY column
+    [Filter] Status               # a dropdown of Status's distinct values
+    [Filter] Customer             # a second filter — multiple [Filter]s AND together
+```
+
+- `[Search]` — a live text box that substring-matches across every column.
+  Trailing text is a custom placeholder (default `Search…`).
+- `[Filter] Field` — a dropdown listing that column's distinct values (`All …`
+  plus each value). Stacking `[Filter]` lines narrows by all of them at once.
+
+**Per-row buttons — `[RowButton]`.** Indent a `[RowButton -> Action] Label`
+(alias `[RowAction]`) under a `[Table]` (or `[Cases]`) to add a small button on
+**every row** that runs the named `[Action]` (§9) with **that row bound as
+`this`**. Destructive (delete) actions auto-confirm before running.
+
+```
+[Table -> Orders] Customer, Status, Total
+    [RowButton -> Approve Order] Approve       # one Approve button per row
+
+[Action] Approve Order
+    [Update] Status = "Approved"               # no -> source: acts on THIS row
+```
+
+Because each button carries its own row as `this`, the `[Update]`/`[Delete]`
+steps default to that record (exactly like a `[Trigger]` step, §9a) — no `?`
+filter needed to target the clicked row.
 
 ### `[Counter -> Source] SubField`
 Stat cards. You **list which records to show** with `[Count]` items (§6); each
@@ -307,6 +365,22 @@ A month calendar placing each record on its `DateField` day.
 [Calendar -> Appointments] Date
 ```
 
+### `[Chart -> Source] LabelField / ValueField`
+A chart. The spec is `labelField / valueField`; the chart **aggregates (sums) the
+numeric value by label**, so duplicate labels merge into one bar/slice. Add an
+indented **`[Kind]`** to choose the shape — `bar` (default), `line`, `pie`, or
+`donut` — and an optional **`[Sort]`** (by the value field, else alphabetically
+by label). Renders as dependency-free inline SVG that follows your theme colors.
+
+```
+[Chart -> Sales] Month / Total
+    [Kind] bar
+    [Sort] Total desc          # order by value; omit for source order
+
+[Chart -> Sales] Region / Total
+    [Kind] donut               # pie / donut get a legend of label + value
+```
+
 > **A visualization needs an explicit `-> Source`.** Without it, it renders empty.
 > Any view can also take a `? condition` to filter its rows (see §12).
 
@@ -345,7 +419,9 @@ bound to that record. A **← Back** returns to the list.
 
 It's `[Detail]` turned inside-out: instead of a dropdown picker, you pick a record
 by clicking it in a table, and the detail is a drill-in page rather than inline.
-The same `this` rules apply to nested views.
+The same `this` rules apply to nested views. An indented **`[Sort] Field [desc]`**
+orders the list (just like in a `[Table]`), and a **`[RowButton]`** (above) adds a
+per-row action button to it too.
 
 ### `[View -> FormName]` — a form as read-only info
 
@@ -455,6 +531,16 @@ inside a page. It binds to the entity it creates records in:
 - `[Fields] a, b, c` — shorthand for several inputs at once; each label is just
   the field name. (Singular vs. plural, like `[Count]`/`[Counts]`.)
 
+**Form width — `[Size]`.** Indent a `[Size]` line under a `[Form]` to set the
+modal's width: `Compact`, `Standard` (default), or `Wide`. Pair a `Wide` form
+with field widths (above) to lay several inputs across each row:
+
+```
+[Form -> Orders] New Order
+    [Size] Wide
+    [Fields] 1Customer, 1Status, 2Notes
+```
+
 **Required fields** — prefix the field name with `!`. Submit is blocked until
 every required (and visible) field is filled:
 
@@ -493,6 +579,21 @@ opens. Pair with `r` to lock it. The value is either a token or a quoted literal
 
 Tokens: `CurrentUser`, `Today`, `Now`. Anything in `"quotes"` (or a bare word) is
 a literal. Auto-filled values are submitted like any other field.
+
+**Field widths — a leading `1`/`2`/`3`.** Prefix a field with a digit to set how
+many columns it spans in a **3-wide grid**: `1` = a third, `2` = two-thirds, `3`
+(or no digit) = full width. It combines with `!` (required) and `r` (read-only)
+in any order:
+
+```
+[Fields] 1First, 1Last, 2Email, 3Notes   # two thirds share a row, then full rows
+[Field "Phone"] !1Phone                  # required + one-third wide
+[Field] 3rNotes                          # full-width + read-only
+```
+
+Widths work in `[Field]`/`[Fields]`, in a **`[Detail]` spec column**
+(`[Detail -> Orders] 1Ticket, 1Customer, 2Notes`), and in the read-only
+**`[View]`** panel (which mirrors the form's own layout).
 
 Each input renders by the field's declared type: a `drop` field becomes a
 dropdown, a `link` field becomes a relationship picker (filtered by its `?`
@@ -676,11 +777,13 @@ where you can (`txtWorkOrder`) — they're simpler and avoid edge cases.
 No prefix? The field is treated as text.
 
 **How each type renders:** `cur` → `$8,000.00`, `date` → `Jun 25, 2026` (date
-picker on input), `bool` → a **Yes/No checkbox**, `drop` → dropdown, `link` →
-relationship picker, `msel` → checkbox chips, `memo` → a multi-line **textarea**
-(resizable). Use `memo` for descriptions, notes, addresses — anything longer than
-a single line; plain `txt` is a one-line input. You store the raw value; the UI
-formats/edits it by type.
+picker on input), `bool` → a **Yes/No checkbox** when editable, `drop` →
+dropdown, `link` → relationship picker, `msel` → checkbox chips, `memo` → a
+multi-line **textarea** (resizable). Use `memo` for descriptions, notes,
+addresses — anything longer than a single line; plain `txt` is a one-line input.
+You store the raw value; the UI formats/edits it by type. In **read contexts** —
+`[Detail]`, `[Cases]`, and `[View]` — a `bool` renders as a colored **Yes/No
+pill** (green/grey) rather than a checkbox.
 (Editable cells show the formatted value and reveal the raw value when clicked.)
 
 ### Computed fields — `[Calc]`
@@ -862,6 +965,35 @@ condition is accepted — keeps logic in one place:
 `? IsOpen` resolves to `Done == False`. Named rules work in view filters, option
 filters, and form show-if conditions alike.
 
+### External data — `[API]`
+
+An **`[API]`** block declares a data source backed by an external REST endpoint
+instead of your database. It registers like any entity — bind views to it by name
+(`[Table -> Products]`) — but its rows are fetched live through the app's server
+proxy. Declare it at the **top level** (a sibling of `[Data]`), or inside
+`[Data]`, with indented sub-tags:
+
+```
+[API] Products
+    [URL]  https://api.example.com/v1/products
+    [Auth] Bearer                       # how the server attaches the secret key
+    [Path] data.items                   # dot-path to the array in the response
+    [Map]  Name  = title                # FMD field  <-  JSON dot-path
+    [Map]  Price = pricing.amount
+    [Want] 50                           # optional: how many records to pull
+```
+
+- `[URL]` — the endpoint to call.
+- `[Auth]` — the auth scheme the **server** uses to attach the credential.
+- `[Path]` — the dot-path to the record array inside the JSON response.
+- `[Map] Field = json.dot.path` — one per field; the left side becomes a
+  referenceable (text) field, the right reads from each JSON record.
+- `[Want]` — an optional record count.
+
+The **secret key never lives in the document** — it stays server-side and is
+injected by the `/api/_ext` proxy. The mapped fields are what your views and the
+linter can reference. *(In the editor, the ⚙ wizard helps fill these in.)*
+
 ---
 
 ## 11. Roles & permissions
@@ -880,14 +1012,27 @@ Declare the roles your app uses in a top-level `[Permissions]` block:
   [Role] Viewer
 ```
 
+Or declare several at once with **`[Roles] A, B, C`** — `[Roles] Admin,
+Supervisor, Viewer` is the same as three `[Role]` lines.
+
 These are the roles that appear when you assign users (see *User management*
 below) and that you reference everywhere else.
 
 ### Granting CRUD — `[Permission]` inside `[Data]`
 
 Grant access per entity with `{Role} verbs` lines in a `[Permission]` block under
-the entity. Verbs are **Read, Create, Update, Delete** (`Write` = Create,
-`Modify` = Update):
+the entity. The four verbs are **Read, Create, Update, Delete**, and each accepts
+synonyms so grants read naturally:
+
+| Verb | Synonyms |
+|------|----------|
+| Read | `read`, `view`, `list`, `see` |
+| Create | `create`, `write`, `add`, `insert`, `new` |
+| Update | `update`, `modify`, `edit`, `change` |
+| Delete | `delete`, `remove`, `destroy` |
+
+`All` (or `Full` / `Manage` / `Admin`) is shorthand for **all four** verbs —
+`{Admin} All` grants everything.
 
 ```
 [Data]
@@ -1006,8 +1151,10 @@ on Save, so your edits survive a reload; "Reset to file" reloads the bundled
 PAGES
   [App Name] text           global app title; renaming it WIPES + rebuilds the DB
   [Display] Name            a page; matched to a menu tab by name
-  [Title] text              heading
-  [TopMenu] a, b, c         navigation tabs (aka [Top Menu Bar]/[Menu]/[Nav])
+  [Title] text              heading      (inline **bold** / *italic*)
+  [Text] text               paragraph    (inline **bold** / *italic* / [[Field]])
+  [TopMenu] a, b, c         top navigation tabs (aka [Top Menu Bar]/[Menu]/[Nav])
+  [SideMenu] a, b, c        vertical left nav rail (aka [Sidebar]/[Side Menu])
   [Main]                    content area
 
 LAYOUT (inside [Main])
@@ -1021,12 +1168,18 @@ VISUALIZATIONS (indented under a card; binding inside the brackets)
   [Slider   -> Src] Label Spent / Cap   + [Slide]/[Slides] items
   [Board    -> Src] GroupField      kanban grouped by a field
   [Calendar -> Src] DateField       month calendar on a date field
+  [Chart    -> Src] Label / Value   + [Kind] bar|line|pie|donut, [Sort]; sums by label
   [Detail   -> Src] col, col        one chosen record + nested views (`this`)
+  [Cases    -> Src] col, col        master-detail list; row click -> drill-in page
+  (a plain read-only bare name that ISN'T a viz keyword no longer renders)
 
-TABLE EXTRAS (indented under a [Table])
+TABLE EXTRAS (indented under a [Table]; [Sort]/[RowButton] also work in [Cases])
   [Sort] Field desc                 order rows (asc default)
   [Group] Field                     sections by value (+ subtotals with [Foot])
   [Foot] sum Amount, count          footer of column aggregates
+  [Search] placeholder              viewer text box; substring-matches any column
+  [Filter] Field                    viewer dropdown of a column's values (stack = AND)
+  [RowButton -> Action] Label       per-row button; runs Action with that row as `this`
 
 ITEMS
   [Count] Label      [Counts] A, B     (for [Counter])
@@ -1038,11 +1191,15 @@ INTERACTIVE TABLE PREFIXES
 
 FORMS & BUTTONS
   [Form -> Source] Title           a modal that creates a Source record
+    [Size] Compact|Standard|Wide   modal width (indented under the [Form])
     [Field "Label"] field          one input (quotes = label)
     [Field "L" (cond)] field       show this field only when cond is true
     [Fields] !Name, Phone          several inputs;  !name = required
     [Field] rNote                  r prefix = read-only (not editable)
+    [Fields] 1First, 1Last, 2Email leading 1/2/3 = column span in a 3-wide grid
     [Field -> CurrentUser] rBy     auto-fill: CurrentUser / Today / Now / "literal"
+  markers combine: !1Phone (required, 1/3) · 3rNotes (full, read-only)
+  widths also work in [Detail] spec cols and the [View] panel
   [Button -> target] Label         a button that opens the matching form
                                    (or runs an [Action] of that name)
 
@@ -1074,20 +1231,33 @@ DATA MODEL
   [Calc] Field = Qty * UnitPrice    computed: numbers, "strings", dates, if(c,a,b)
   [Rollup] Total = sum(Children Field ? cond via Link)   parent total from children
   [Lookup] CustPhone = Customer.Phone   pull a field across a link (read-only)
+  [API] Name             external REST source (server holds the secret key)
+    [URL] .. · [Auth] .. · [Path] arr.path · [Map] Field = json.dot · [Want] N
+
+THEMING (top-level [Style]; applies to the whole app)
+  [Size] Compact|Standard|Full     content width
+  [Font] Inter|Poppins|Serif|…     app font (curated Google fonts + system stacks)
+  [Colors] (aka [Palette]/[Theme]) wraps the six basics:
+    [Background] [Foreground] [Text] [Lines] [Primary] [Secondary]  (hex or name)
+    (Text auto-derives muted+headings; Primary auto-derives button-text)
+  back-compat: [Surface] [Card] [Muted] [Heading] [ButtonText] [Border]
+  see THEMES.md for 5 ready-made themes
 
 ROLES & PERMISSIONS
   [Permissions]                 declare roles
-    [Role] Admin
+    [Role] Admin                (or [Roles] Admin, Supervisor, Viewer — many at once)
   [List Orders] ...             grant CRUD per entity (verbs: Read/Create/Update/Delete)
     [Permission]
-      {Admin} Read, Create, Update, Delete
-      {Viewer} Read
+      {Admin} All               All/Full/Manage/Admin = all four verbs
+      {Viewer} Read             synonyms: read=view/list/see · create=write/add/insert/new
+                                update=modify/edit/change · delete=remove/destroy
   {Role, !Role} on any tag      visibility: allow / !deny (deny-only = everyone else)
   [User Management] Label       button → in-app add/edit/delete users + assign roles
 
 FIELD TYPE PREFIXES
-  txt text · num number · cur currency · bool boolean · date date
-  drop dropdown · link relationship
+  txt text · memo multi-line · num number · cur currency · bool boolean · date date
+  drop dropdown · link relationship · msel multi-select
+  full set: txt | memo | num | cur | bool | date | drop | link | msel
   multi-word: "txtRelated Vendor" -> "Related Vendor"
 
 OPTIONS (a line under the entity, configuring a drop/link field)
@@ -1183,3 +1353,6 @@ database matches your model.
   configure.
 - **Use emojis in titles.** There are no auto-icons — put an emoji right in a
   `[Title]` or `(Card Name)`, e.g. `[Title] 💍 Wedding Planner`.
+- **Tables go mobile automatically.** On phones, a wide `[Table]`/`[Cases]`/`[List]`
+  reflows so each row becomes a **labeled card** (the column header shown beside
+  each value) instead of running off-screen. No syntax — it just happens.

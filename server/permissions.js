@@ -29,31 +29,35 @@ export function isAllowed(perms, source, verb, roles) {
   return r.some((role) => Array.isArray(ent[role]) && ent[role].includes(verb))
 }
 
-// Express guard: 403 if the request isn't permitted for the effective roles.
+// Express guard: allow/deny a data request for the caller's effective roles.
 // Options:
 //   schema      — which permission model to enforce (default 'public' = editor).
-//   requireAuth — deployed apps: demand a signed-in user (401 if anonymous) and
+//   requireAuth — deployed apps: when a PROTECTED source denies an anonymous
+//                 caller, answer 401 (prompt sign-in) instead of a dead 403, and
 //                 NEVER honor the X-FMD-Roles preview header (real roles only).
-// The X-FMD-Roles header ("Preview as" selector) is honored ONLY for the editor
-// routes AND only for a trusted caller — an authenticated author, or open dev
-// mode where there is no auth at all. An anonymous caller can never assert roles.
+// A source with NO [Permission] stays public (isAllowed is true for any roles,
+// including anonymous []), so open apps remain accessible without sign-in — only
+// sources that declare a permission require the granting role. The X-FMD-Roles
+// header ("Preview as") is honored ONLY on the editor routes and only for a
+// trusted caller (an authenticated author, or open dev mode); an anonymous
+// caller can never assert roles.
 export async function guard(req, res, source, method, { schema = 'public', requireAuth = false } = {}) {
   const secured = !!process.env.OIDC_ISSUER
-  if (requireAuth && secured && !req.user?.sub) {
-    res.status(401).json({ error: 'sign-in required' })
-    return false
-  }
   const perms = await loadPermissions(schema)
   let roles = req.user?.roles || []
   const mayPreview = !requireAuth && (secured ? !!req.user?.sub : true)
   if (mayPreview && req.headers['x-fmd-roles'] !== undefined) {
     roles = String(req.headers['x-fmd-roles']).split(',').map((s) => s.trim()).filter(Boolean)
   }
-  if (!isAllowed(perms, source, VERB_FOR[method] || 'read', roles)) {
-    res.status(403).json({ error: 'forbidden' })
+  if (isAllowed(perms, source, VERB_FOR[method] || 'read', roles)) return true
+  // Denied: on a deployed app, an anonymous hit to a protected source prompts
+  // sign-in (they may hold the role once authenticated); otherwise it's a 403.
+  if (requireAuth && secured && !req.user?.sub) {
+    res.status(401).json({ error: 'sign-in required' })
     return false
   }
-  return true
+  res.status(403).json({ error: 'forbidden' })
+  return false
 }
 
 // Require an authenticated admin (a user holding the `admin` role, or open dev

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useContext, useState } from 'react'
 import type {
   Node,
   BlockNode as BlockNodeType,
@@ -7,15 +7,26 @@ import type {
 } from '../fmd/types'
 import { WidgetCard, Viz, VizDetail, VizCases, VizView, FormButton } from '../Widget'
 import { isDataBlock, visibleForRoles } from '../parser'
-import { useSource, keysOf, useVisibilityRoles, useUserMgmt, useRecord } from '../data'
-import { interpolate } from '../fmd/format'
+import { useSource, keysOf, useVisibilityRoles, useUserMgmt, useCase, SchemaContext } from '../data'
+import { interpolate, formatValue, fieldType } from '../fmd/format'
 import { widgetViz } from '../fmd/parse/nodes'
+
+// The current case record plus a type-aware formatter for [[field]] tokens, so
+// inline text (in [Title]/[Text]/leaf elements) matches the type-aware cells —
+// a boolean reads "Yes", dates/currency format the same as a [View]/[Table].
+function useCaseInterpolation(): { record: Record<string, unknown> | null; fmtField: (name: string, value: unknown) => string } {
+  const caseCtx = useCase()
+  const schema = useContext(SchemaContext)
+  const fields = caseCtx?.source ? schema?.[caseCtx.source.toLowerCase()]?.fields ?? null : null
+  const fmtField = (name: string, value: unknown): string => formatValue(value, fieldType(fields || [], name))
+  return { record: caseCtx?.record ?? null, fmtField }
+}
 
 // Renders the UI tree. [Data] blocks are skipped -- they define what exists
 // behind the scenes, not what is shown.
 export default function Renderer({ node }: { node: Node | null }) {
   const roles = useVisibilityRoles()
-  const record = useRecord() // the current [Cases]/[Detail] case, for [[field]] text
+  const { record, fmtField } = useCaseInterpolation()
   if (!node) return null
   // Honor a `{Role, !Role}` visibility block (hides the element + its subtree).
   if (node.roles && !visibleForRoles(node.roles, roles)) return null
@@ -28,10 +39,10 @@ export default function Renderer({ node }: { node: Node | null }) {
       return <BlockNode node={node} />
 
     case 'Title':
-      return <h1 className="fmd-title">{inlineMd(interpolate(node.value, record))}</h1>
+      return <h1 className="fmd-title">{inlineMd(interpolate(node.value, record, fmtField))}</h1>
 
     case 'Menu':
-      return <Menu items={node.items} />
+      return <Menu items={node.items} side={node.side} />
 
     case 'WidgetRow':
       // Legacy `(Name -> source)` widget row: render each widget whose name maps
@@ -108,7 +119,7 @@ export default function Renderer({ node }: { node: Node | null }) {
       return <ListNode node={node} />
 
     case 'Text':
-      return <p className="fmd-text">{inlineMd(interpolate(node.value, record))}</p>
+      return <p className="fmd-text">{inlineMd(interpolate(node.value, record, fmtField))}</p>
 
     default:
       return null
@@ -122,7 +133,7 @@ function UserMgmtButton({ label }: { label: string }) {
 }
 
 function BlockNode({ node }: { node: BlockNodeType }) {
-  const record = useRecord()
+  const { record, fmtField } = useCaseInterpolation()
   const tag = node.tag.toLowerCase()
   const cls = `fmd-block fmd-${tag.replace(/\s+/g, '-')}`
   const children = node.children.map((c, i) => <Renderer key={i} node={c} />)
@@ -142,7 +153,7 @@ function BlockNode({ node }: { node: BlockNodeType }) {
   return (
     <div className="fmd-element">
       <span className="fmd-element-tag">{node.tag}</span>
-      {node.value && <span className="fmd-element-value">{interpolate(node.value, record)}</span>}
+      {node.value && <span className="fmd-element-value">{interpolate(node.value, record, fmtField)}</span>}
     </div>
   )
 }
@@ -153,10 +164,12 @@ export function Menu({
   items,
   active,
   onSelect,
+  side,
 }: {
   items: string[]
   active?: string
   onSelect?: (item: string) => void
+  side?: boolean
 }) {
   const [localActive, setLocalActive] = useState(0)
   const controlled = active !== undefined && typeof onSelect === 'function'
@@ -164,7 +177,7 @@ export function Menu({
     controlled ? String(active).toLowerCase() === String(item).toLowerCase() : i === localActive
   const handle = (item: string, i: number) => (controlled ? onSelect(item) : setLocalActive(i))
   return (
-    <nav className="fmd-menu">
+    <nav className={`fmd-menu${side ? ' fmd-side-menu' : ''}`}>
       {items.map((item, i) => (
         <button key={i} className={isActive(item, i) ? 'active' : ''} onClick={() => handle(item, i)}>
           {item}
