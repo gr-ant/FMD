@@ -407,6 +407,15 @@ export interface ViewNode extends BaseNode {
   label: string
 }
 
+// An in-app AI chat assistant bound to one or more data sources:
+// [AI Chat] Orders, Customers, Inventory. Renders a chat panel that answers
+// questions about the named sources. STRICTLY READ-ONLY, running as the current
+// user (see server/chat.js) — it can search/read the sources but never write.
+export interface AIChatNode extends BaseNode {
+  type: 'AIChat'
+  sources: string[] // lowercased source names the assistant may read
+}
+
 // A plain text / fallback line.
 export interface TextNode extends BaseNode {
   type: 'Text'
@@ -455,4 +464,5 @@ export type Node =
   | DetailNode
   | CasesNode
   | ViewNode
+  | AIChatNode
   | TextNode
