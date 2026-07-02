@@ -16,6 +16,8 @@ import { useGoogleFont } from './ui/fontLoader'
 import { setPreviewRoles } from './state/auth'
 import CodeEditor from './ui/panels/CodeEditor'
 import DataInspector from './ui/panels/DataInspector'
+import WikiPanel from './ui/panels/WikiPanel'
+import { generateWiki } from './fmd/wiki'
 import AuthControl from './ui/panels/AuthControl'
 import PageView from './ui/panels/PageView'
 import ConfigsMenu from './ui/panels/ConfigsMenu'
@@ -84,6 +86,7 @@ export default function App() {
     document.body.style.cursor = 'col-resize'
   }
   const [showData, setShowData] = useState(false)
+  const [showWiki, setShowWiki] = useState(false)
   const [store, setStore] = useState<Record<string, FmdRecord[]> | null>(null)
   const [version, setVersion] = useState(0)
   const [save, setSave] = useState<SaveState>({ state: 'idle', msg: '' })
@@ -297,6 +300,7 @@ export default function App() {
   // so the (declarative) UI re-reads the data the action just wrote.
   const actions = useMemo(() => collectActions(tree), [tree])
   const triggers = useMemo(() => collectTriggers(tree), [tree])
+  const wiki = useMemo(() => generateWiki(tree, schema), [tree, schema])
   const bumpVersion = useCallback(() => setVersion((v) => v + 1), [])
   // After an action runs, poke the server to evaluate triggers (the action may
   // have made a row match), then refetch. A 60s server sweep runs regardless.
@@ -490,6 +494,7 @@ export default function App() {
                 <button key={b.line} className="me-menu-item" onClick={() => { setApiSetup({ name: b.name }); setMobileMenu(false) }}>⚙ Connect {b.name} API</button>
               ))}
               <button className="me-menu-item" onClick={() => { setShowData(true); setMobileMenu(false) }}>🗂 Data model</button>
+              <button className="me-menu-item" onClick={() => { setShowWiki(true); setMobileMenu(false) }}>📖 App wiki</button>
               <button className="me-menu-item" onClick={() => { setShowDb(true); setMobileMenu(false) }}>📦 Manage Deployments</button>
               <button className="me-menu-item" onClick={() => { setShowUsers(true); setMobileMenu(false) }}>👤 Users</button>
               <button className="me-menu-item danger" onClick={() => { resetToFile(); setMobileMenu(false) }}>↺ Reset to file</button>
@@ -498,6 +503,7 @@ export default function App() {
         )}
 
         {showData && <DataInspector schema={schema} store={store || {}} />}
+        {showWiki && <WikiPanel wiki={wiki} onClose={() => setShowWiki(false)} />}
         {showDb && <ManageDeployments onClose={() => setShowDb(false)} />}
         {showUsers && <UserManagement roles={appRoles} onClose={() => setShowUsers(false)} />}
         {apiSetup && (
@@ -564,6 +570,9 @@ export default function App() {
               </button>
               <button className="toggle" onClick={() => setShowData((s) => !s)}>
                 {showData ? 'Hide data model' : 'Data model'}
+              </button>
+              <button className="toggle" onClick={() => setShowWiki((s) => !s)}>
+                {showWiki ? 'Hide wiki' : '📖 App wiki'}
               </button>
               <ImportFiles onImport={importFiles} />
               <button className="toggle" onClick={() => setShowDb(true)} title="Manage deployments — rename, download, delete">📦 Manage Deployments</button>
@@ -641,6 +650,7 @@ export default function App() {
         </div>
 
         {showData && <DataInspector schema={schema} store={store || {}} />}
+        {showWiki && <WikiPanel wiki={wiki} onClose={() => setShowWiki(false)} />}
       </div>
       {showDb && <ManageDeployments onClose={() => setShowDb(false)} />}
       {showUsers && <UserManagement roles={appRoles} onClose={() => setShowUsers(false)} />}
