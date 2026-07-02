@@ -31,14 +31,34 @@ export function fieldName(ref: unknown): string {
   return String(ref || '').split(/\s+/).filter(Boolean).map((w) => cleanWord(w).word).join(' ')
 }
 
-// Parse a comma-separated field list into [{ name, type }], stripping prefixes.
+// Split a field list at top-level commas, leaving commas inside a "quoted label"
+// alone (so `txtNote "Notes, private"` stays one field).
+function splitFieldList(str: string): string[] {
+  const out: string[] = []
+  let buf = '', inQ = false
+  for (const ch of str) {
+    if (ch === '"') inQ = !inQ
+    if (ch === ',' && !inQ) { out.push(buf); buf = '' } else buf += ch
+  }
+  if (buf.trim()) out.push(buf)
+  return out
+}
+
+// Parse a comma-separated field list into [{ name, type, label? }], stripping type
+// prefixes. A field may carry a trailing "quoted" display label to name it more
+// nicely than its raw field name: `txtTicketNo "Ticket Number", dropStatus "Status"`.
 export function parseFields(content: string): Field[] {
   if (!content) return []
-  return content.split(',').map((s) => s.trim()).filter(Boolean).map((field) => {
-    const words = field.split(/\s+/).filter(Boolean).map(cleanWord)
+  return splitFieldList(content).map((s) => s.trim()).filter(Boolean).map((spec) => {
+    let label: string | undefined
+    const lm = spec.match(/\s*"([^"]*)"\s*$/)
+    if (lm) { label = lm[1].trim() || undefined; spec = spec.slice(0, lm.index).trim() }
+    const words = spec.split(/\s+/).filter(Boolean).map(cleanWord)
     const name = words.map((w) => w.word).join(' ')
     const found = words.find((w) => w.type)
     const type: FieldType = (found && found.type) || 'text'
-    return { name, type }
+    const field: Field = { name, type }
+    if (label) field.label = label
+    return field
   })
 }

@@ -60,7 +60,7 @@ function DataModelSection({ wiki }: { wiki: AppWiki }) {
               <tbody>
                 {e.fields.map((f: WikiFieldRow) => (
                   <tr key={f.name}>
-                    <td className="wiki-field-name">{f.name}</td>
+                    <td className="wiki-field-name">{f.label || f.name}{f.label && <span className="wiki-field-raw"> {f.name}</span>}</td>
                     <td><span className="wiki-type-chip">{f.type}</span></td>
                     <td>{f.computed && <span className="wiki-computed-chip">{f.computed}</span>}</td>
                     <td className="wiki-formula">{f.formula || f.options || <span className="wiki-dash">—</span>}</td>

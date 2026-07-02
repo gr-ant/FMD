@@ -39,6 +39,10 @@ export interface FieldOptions {
 export interface Field {
   name: string
   type: FieldType
+  // Optional human-friendly display label from a trailing "quoted" string in the
+  // [List]/[Store] declaration, e.g. `txtTicketNo "Ticket Number"`. Used for
+  // reader-facing text (the app wiki guide) where it beats the raw field name.
+  label?: string
   options?: FieldOptions
   calc?: string
   rollup?: string

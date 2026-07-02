@@ -13,6 +13,7 @@ import { fieldName } from '../parser'
 
 export interface WikiFieldRow {
   name: string
+  label: string | null     // declared "quoted" display label, if any
   type: string
   computed: 'Calc' | 'Rollup' | 'Lookup' | null
   formula: string | null
@@ -218,9 +219,17 @@ function oxford(items: string[], conj = 'and'): string {
   return `${xs.slice(0, -1).join(', ')}, ${conj} ${xs[xs.length - 1]}`
 }
 
-/** Split a viz `spec` ("Customer, Status") into humanised column labels. */
-function specCols(spec: string): string[] {
-  return String(spec || '').split(',').map((s) => humanise(s.trim())).filter(Boolean)
+/** Resolve a field reference to its declared "quoted" label, or a humanised name. */
+function fieldLabelOf(schema: Schema, source: string | null, ref: string): string {
+  const bare = fieldName(ref)
+  const entity = source ? schema[source.toLowerCase()] : null
+  const f = entity?.fields.find((ff) => ff.name.toLowerCase() === bare.toLowerCase())
+  return (f && f.label) || humanise(bare)
+}
+
+/** A viz `spec`'s columns as their declared labels (falling back to humanised names). */
+function specCols(schema: Schema, source: string | null, spec: string): string[] {
+  return String(spec || '').split(',').map((s) => s.trim()).filter(Boolean).map((ref) => fieldLabelOf(schema, source, ref))
 }
 
 // Turn a single page's elements into task-oriented, end-user instructions.
@@ -298,7 +307,7 @@ function buildPageGuide(
 
   const describeViz = (n: VizNode): void => {
     const src = sourceName(schema, n.source)
-    const cols = specCols(n.spec)
+    const cols = specCols(schema, n.source, n.spec)
     if (n.viz === 'table') {
       let s = `The **${src}** table lists ${cols.length ? oxford(cols) : `your ${src.toLowerCase()}`}.`
       const ops: string[] = []
@@ -345,7 +354,7 @@ function buildPageGuide(
       switch (c.type) {
         case 'Viz': describeViz(c); break
         case 'Cases': {
-          const cols = specCols(c.spec)
+          const cols = specCols(schema, c.source, c.spec)
           const link = cols[0] || 'first column'
           const thing = singular(sourceName(schema, c.source).toLowerCase())
           tasks.push(`To open a ${thing}, click its **${link}** in the ${sourceName(schema, c.source)} list — that opens the full record page.`)
@@ -412,6 +421,7 @@ function buildEntities(schema: Schema): WikiEntity[] {
     const fields: WikiFieldRow[] = entity.fields.map((f) => {
       const row: WikiFieldRow = {
         name: f.name,
+        label: f.label || null,
         type: typeLabel(f.type),
         computed: null,
         formula: null,
@@ -655,7 +665,8 @@ export function wikiToMarkdown(wiki: AppWiki): string {
       for (const f of e.fields) {
         const computed = f.computed ? `[${f.computed}]` : ''
         const extra = f.formula || f.options || ''
-        lines.push(`| ${f.name} | ${f.type} | ${computed} | ${extra} |`)
+        const name = f.label ? `${f.label} (${f.name})` : f.name
+        lines.push(`| ${name} | ${f.type} | ${computed} | ${extra} |`)
       }
       lines.push('')
     }
