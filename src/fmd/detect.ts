@@ -21,8 +21,4 @@ export function pickField(
   return keys.find((k) => fallbackPredicate(k, rows)) || keys[0] || null
 }
 
-export const firstText = (rows: FmdRecord[]): string | null =>
-  pickField(rows, [], (k, r) => !isNum(r[0][k]))
-export const firstNumber = (rows: FmdRecord[]): string | null =>
-  pickField(rows, [], (k, r) => isNum(r[0][k]))
 export { isNum }

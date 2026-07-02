@@ -33,7 +33,7 @@ export default function PageView({ page, activeName, menuItems, onSelect, side, 
     const nav = menuItems.length > 0
       ? <Menu items={menuItems} active={activeName} onSelect={select} side />
       : null
-    if (collapsible) {
+    if (collapsible && nav) {
       return (
         <div className="fmd-display has-side-menu is-collapsible">
           <div className="side-topbar">
